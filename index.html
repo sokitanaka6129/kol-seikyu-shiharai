@@ -178,6 +178,7 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
 <div class="bar">
   <div class="sbox"><span style="color:#8a8279">🔍</span><input placeholder="検索…" id="Q" oninput="rT()"></div>
   <div class="pills"><button class="pill on" onclick="sf('all',this)">すべて</button><button class="pill" onclick="sf('warn',this)">⚠要確認</button><button class="pill" onclick="sf('group',this)">同一先</button></div>
+  <div class="pills" style="margin-left:auto;align-items:center"><span style="font-size:10px;color:#8a8279;padding-right:2px">振分:</span><button class="pill on" id="vmPay" onclick="setVM('pay')">入金予定日</button><button class="pill" id="vmInv" onclick="setVM('inv')">請求書発行日</button></div>
 </div>
 <div class="tw"><div class="tc"><table><thead id="TH"></thead><tbody id="TB"></tbody></table></div></div>
 <div class="mobile-cards" id="MC"></div>
@@ -209,6 +210,7 @@ try{
 var F=function(n){return n==null||n===''||isNaN(n)?'':Number(n).toLocaleString('ja-JP')};
 var E=function(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/'/g,'&#39;')};
 var SK='kol-invoice-v1';var D={m:{},o:[]};var AM='';var PD=[];var FI='all';var EC=null;
+var VMODE='pay';var AMI='';
 
 var CL=[
   {k:'name',l:'取引先',w:120,t:'t'},{k:'date',l:'発行日',w:80,t:'t'},{k:'_invM',l:'請求月',w:64,t:'x'},{k:'recv',l:'受理',w:76,t:'t'},{k:'invNum',l:'請求書No',w:88,t:'t'},{k:'subject',l:'件名',w:140,t:'t'},
@@ -233,7 +235,9 @@ function invMonthsAgo(v){var t=pYM(v.date);if(!t)return 0;var n=new Date();retur
 function todayStr(){var n=new Date();return n.getFullYear()+'/'+('0'+(n.getMonth()+1)).slice(-2)+'/'+('0'+n.getDate()).slice(-2)}
 function nearYear(m){var n=new Date();var ni=n.getFullYear()*12+n.getMonth()+1;var best=null,bd=1e9;[n.getFullYear()-1,n.getFullYear(),n.getFullYear()+1].forEach(function(y){var d=Math.abs(y*12+m-ni);if(d<bd||(d===bd&&y*12+m>=ni)){bd=d;best=y}});return best}
 function gT(ls){var g={};ls.forEach(function(v){var k=v.name+'|'+v.acNum;if(!g[k])g[k]=[];g[k].push(v)});var o={};Object.keys(g).forEach(function(k){var a=g[k];if(a.length>1){var t=a.reduce(function(s,i){return s+cc(i).tot},0);a.forEach(function(i){o[i.id]=t})}});return o}
-function cL(){return D.m[AM]||[]}
+function invGroups(){var m={},o=[];var a=allInv();for(var i=0;i<a.length;i++){var v=a[i];var t=pYM(v.date);var k=t?yK(t):'\u65e5\u4ed8\u306a\u3057';if(!m[k]){m[k]=[];o.push(k)}m[k].push(v)}o.sort(function(x2,y2){var x=kY(x2),y=kY(y2);if(!x)return 1;if(!y)return -1;return(x.y*12+x.m)-(y.y*12+y.m)});return{m:m,o:o}}
+function curTab(){return VMODE==='pay'?AM:AMI}
+function cL(){if(VMODE==='pay')return D.m[AM]||[];var g=invGroups();return g.m[AMI]||[]}
 
 // ===== DEFAULT DATA =====
 var RAW=[
@@ -328,13 +332,22 @@ function rAll(){try{rTabs();rSum();rT();rMC()}catch(e){console.error(e);document
 
 // ===== TABS =====
 function rTabs(){
-  var h='';
-  for(var i=0;i<D.o.length;i++){var m=D.o[i];var cnt=(D.m[m]||[]).length;var tot=0;var arr=D.m[m]||[];for(var j=0;j<arr.length;j++)tot+=cc(arr[j]).tot;
-    h+='<div class="tab'+(m===AM?' on':'')+'" onclick="go(\''+E(m)+'\')">'+E(m)+'<span class="cnt">'+cnt+'\u4ef6 \u00a5'+F(tot)+'</span></div>'}
-  h+='<div class="tab" onclick="addTab()" style="font-size:16px;font-weight:700;color:#8a8279" title="\u6708\u30bf\u30d6\u3092\u8ffd\u52a0">\uff0b</div>';
+  var g=VMODE==='pay'?{m:D.m,o:D.o}:invGroups();
+  if(VMODE!=='pay'&&(!AMI||!g.m[AMI]))AMI=g.o[g.o.length-1]||'';
+  var cur=curTab();var h='';
+  for(var i=0;i<g.o.length;i++){var mm=g.o[i];var arr=g.m[mm]||[];var tot=0;for(var j=0;j<arr.length;j++)tot+=cc(arr[j]).tot;
+    h+='<div class="tab'+(mm===cur?' on':'')+'" onclick="go(\''+E(mm)+'\')">'+E(mm)+'<span class="cnt">'+arr.length+'\u4ef6 \u00a5'+F(tot)+'</span></div>'}
+  if(VMODE==='pay')h+='<div class="tab" onclick="addTab()" style="font-size:16px;font-weight:700;color:#8a8279" title="\u6708\u30bf\u30d6\u3092\u8ffd\u52a0">\uff0b</div>';
   document.getElementById('T').innerHTML=h;
 }
-function go(m){AM=m;EC=null;rAll()}
+function go(m){if(VMODE==='pay')AM=m;else AMI=m;EC=null;rAll()}
+function setVM(m){
+  VMODE=m;
+  var p=document.getElementById('vmPay'),q=document.getElementById('vmInv');
+  if(p)p.classList.toggle('on',m==='pay');if(q)q.classList.toggle('on',m!=='pay');
+  if(m!=='pay'){var g=invGroups();if(!AMI||!g.m[AMI])AMI=g.o[g.o.length-1]||''}
+  EC=null;rAll();
+}
 function addTab(){
   var y=2026,mo=1;if(D.o.length){var last=kY(D.o[D.o.length-1]);if(last){y=last.y;mo=last.m+1;if(mo>12){mo=1;y++}}}
   var def=y+'\u5e74'+mo+'\u6708';var input=prompt('\u8ffd\u52a0\u3059\u308b\u6708\uff08\u4f8b: 2026\u5e744\u6708\uff09',def);
@@ -348,7 +361,7 @@ function rSum(){
   var ls=cL(),p=0,t=0,w=0,wc=0;
   for(var i=0;i<ls.length;i++){var c=cc(ls[i]);p+=c.tot;t+=c.tax;w+=(ls[i].wh||0);if(ls[i].note&&ls[i].note.indexOf('\u26a0')>=0)wc++}
   document.getElementById('S').innerHTML=
-    '<div class="card g"><div class="lb">'+E(AM)+' \u652f\u6255\u5408\u8a08</div><div class="vl">\u00a5'+F(p)+'</div><div class="sub">'+ls.length+'\u4ef6</div></div>'+
+    '<div class="card g"><div class="lb">'+E(curTab())+' '+(VMODE==='pay'?'\u652f\u6255\u5408\u8a08':'\u767a\u884c\u5206\u5408\u8a08')+'</div><div class="vl">\u00a5'+F(p)+'</div><div class="sub">'+ls.length+'\u4ef6</div></div>'+
     '<div class="card b"><div class="lb">\u6d88\u8cbb\u7a0e</div><div class="vl">\u00a5'+F(t)+'</div></div>'+
     '<div class="card"><div class="lb">\u6e90\u6cc9\u7a0e</div><div class="vl">\u00a5'+F(w)+'</div></div>'+
     '<div class="card r"><div class="lb">\u8981\u78ba\u8a8d</div><div class="vl">'+wc+'\u4ef6</div></div>';
@@ -364,7 +377,7 @@ function fList(){
 }
 
 function rT(){
-  if(!AM){document.getElementById('TH').innerHTML='';document.getElementById('TB').innerHTML='<tr><td colspan="24" class="empty">\u30c7\u30fc\u30bf\u306a\u3057</td></tr>';return}
+  if(!curTab()){document.getElementById('TH').innerHTML='';document.getElementById('TB').innerHTML='<tr><td colspan="24" class="empty">\u30c7\u30fc\u30bf\u306a\u3057</td></tr>';return}
   var r=fList(),fl=r.fl,gt=r.gt,ls=r.ls;
   var hh='<tr><th style="width:24px">No</th>';
   for(var i=0;i<CL.length;i++){var c=CL[i];hh+='<th'+(c.t==='n'||c.t==='x'?' class="r"':'')+' style="min-width:'+c.w+'px">'+c.l+'</th>'}
@@ -386,6 +399,7 @@ function rT(){
       else if(col.k==='note'){var tx=(v.note||'').replace(/\u26a0\s*/g,'');html+='<td class="ed" data-i="'+idx+'" data-k="note" onclick="sE(this)">'+(wr?'<span class="wi">\u26a0</span> ':'')+'<span class="nt">'+E(tx)+'</span></td>'}
       else if(col.t==='n'){html+='<td class="r ed" data-i="'+idx+'" data-k="'+col.k+'" onclick="sE(this)">'+(v[col.k]?F(v[col.k]):'')+'</td>'}
       else if(col.t==='s'){html+='<td class="c ed" data-i="'+idx+'" data-k="'+col.k+'" onclick="sE(this)">'+(v[col.k]||'')+'</td>'}
+      else if(col.k==='file'){var fv=v.file||'';html+='<td class="ed" data-i="'+idx+'" data-k="file" onclick="sE(this)"><span onclick="event.stopPropagation();openPdfIdx('+idx+')" style="cursor:pointer" title="PDF\u3092\u958b\u304f">\ud83d\udcc4</span> <span class="nt">'+E(fv)+'</span></td>'}
       else{var val=v[col.k]||'';if(col.k==='name'&&v.tNum)val+='<br><span class="tn">'+v.tNum+'</span>';html+='<td class="ed" data-i="'+idx+'" data-k="'+col.k+'" onclick="sE(this)"'+(col.k==='date'||col.k==='deadline'||col.k==='payBy'?' style="white-space:nowrap"':'')+'>'+val+'</td>'}
     }
     html+='<td class="c"><select class="mv" onchange="mvI('+idx+',this.value)">';
@@ -402,7 +416,7 @@ function rT(){
 var mmIdx=null;
 function rMC(){
   var mc=document.getElementById('MC');if(!mc)return;
-  if(!AM){mc.innerHTML='<div class="empty">\u6708\u30bf\u30d6\u3092\u8ffd\u52a0</div>';return}
+  if(!curTab()){mc.innerHTML='<div class="empty">\u6708\u30bf\u30d6\u3092\u8ffd\u52a0</div>';return}
   var r=fList(),fl=r.fl,gt=r.gt,ls=r.ls;
   if(!fl.length){mc.innerHTML='<div class="empty">\u30c7\u30fc\u30bf\u306a\u3057</div>';return}
   var tP=0,h='';
@@ -424,6 +438,7 @@ function rMC(){
     if(v.payBy)h+='<dt>\u5165\u91d1\u5e0c\u671b</dt><dd>'+v.payBy+'</dd>';
     h+='</dl>';
     if(v.bank)h+='<div class="m-card-bank">'+E(v.bank)+' '+E(v.branch||'')+' '+E(v.acType||'')+' '+E(v.acNum||'')+' '+E(v.acName||'')+'</div>';
+    if(v.file)h+='<div class="m-card-bank">\ud83d\udcc4 <span style="text-decoration:underline;cursor:pointer" onclick="openPdfIdx('+idx+')">'+E(v.file)+'</span></div>';
     if(wr)h+='<div class="m-card-note">\u26a0 '+E((v.note||'').replace(/\u26a0\s*/g,''))+'</div>';
     h+='<div class="m-card-acts"><select class="mv" onchange="mvI('+idx+',this.value)">';
     for(var k=0;k<D.o.length;k++)h+='<option value="'+E(D.o[k])+'"'+(D.o[k]===AM?' selected':'')+'>'+E(D.o[k])+'</option>';
@@ -483,13 +498,20 @@ function cE(){
   EC=null;cL()[idx][key]=val;sv();rAll();
 }
 
-function mvI(idx,tab){var v=cL()[idx];if(!v)return;cL().splice(idx,1);if(!cL().length&&D.o.length>1){delete D.m[AM];D.o=D.o.filter(function(x){return x!==AM})}eT(tab);D.m[tab].push(v);AM=tab;sv();rAll()}
+function rmById(id){
+  for(var i=0;i<D.o.length;i++){var k=D.o[i],arr=D.m[k]||[];
+    for(var j=0;j<arr.length;j++){if(arr[j].id===id){arr.splice(j,1);
+      if(!arr.length&&D.o.length>1){delete D.m[k];D.o=D.o.filter(function(x){return x!==k});if(AM===k)AM=D.o[D.o.length-1]||''}
+      return true}}}
+  return false}
+function mvI(idx,tab){var v=cL()[idx];if(!v)return;rmById(v.id);eT(tab);D.m[tab].push(v);if(VMODE==='pay')AM=tab;sv();rAll()}
 function addRow(){
+  if(VMODE!=='pay')setVM('pay');
   if(!AM&&D.o.length)AM=D.o[D.o.length-1];if(!AM){addTab();return}
   cL().push({id:Date.now(),name:'',date:'',invNum:'',subject:'',rate:.08,subtotal:0,wh:null,exp:null,deadline:'',payBy:'',tNum:'',bank:'',branch:'',acType:'\u666e\u901a',acNum:'',acName:'',note:'',file:''});
   sv();rAll();var ls=cL();setTimeout(function(){if(window.innerWidth<=768){openMM(ls.length-1)}else{var c=document.querySelector('td[data-i="'+(ls.length-1)+'"][data-k="name"]');if(c){c.scrollIntoView({block:'center'});sE(c)}}},100);
 }
-function dR(idx){var ls=cL();if(!confirm((ls[idx].name||'\u3053\u306e\u884c')+'\u3092\u524a\u9664?'))return;ls.splice(idx,1);if(!ls.length&&D.o.length>1){delete D.m[AM];D.o=D.o.filter(function(x){return x!==AM});AM=D.o[D.o.length-1]||''}sv();rAll()}
+function dR(idx){var ls=cL();if(!ls[idx])return;if(!confirm((ls[idx].name||'\u3053\u306e\u884c')+'\u3092\u524a\u9664?'))return;rmById(ls[idx].id);sv();rAll()}
 function reGrp(){if(!confirm('\u5168\u30c7\u30fc\u30bf\u3092\u30eb\u30fc\u30eb\u3067\u632f\u5206?'))return;var pool=[];for(var i=0;i<D.o.length;i++){var arr=D.m[D.o[i]]||[];for(var j=0;j<arr.length;j++)pool.push(arr[j])}D=build(pool);AM=D.o[D.o.length-1]||'';sv();rAll()}
 function doReset(){if(!confirm('\u521d\u671f\u30c7\u30fc\u30bf\u306b\u623b\u3059?'))return;init();sv();rAll()}
 function sf(f,el){FI=f;document.querySelectorAll('.pill').forEach(function(p){p.classList.remove('on')});el.classList.add('on');rT();rMC()}
@@ -586,6 +608,7 @@ function doP(file,forcedPay,recvYM){
     .then(function(p){
       var inv=apR(p,file.name);
       inv.recv=recvYM?yK(recvYM):todayStr();
+      try{idbSet('f:'+inv.id,file)}catch(e){}
       if(forcedPay&&!inv.deadline&&!inv.payBy)inv.deadline=eom(forcedPay);
       autoDL(inv);var ym=gPM(inv);var k=yK(ym);
       if(forcedPay)k=yK(forcedPay);
@@ -605,6 +628,7 @@ function apR(p,fn){
   if(!p.is_corp&&!wh&&sub>0){wh=Math.round(sub*.1021);notes.push('\u26a0 \u6e90\u6cc910.21%\u63a7\u9664')}
   if(!p.tNum&&p.tax_rate===.10)notes.push('\u26a0 \u9069\u683c\u756a\u53f7\u306a\u3057\u21928%');
   if(!p.tNum&&p.tax_rate===0)notes.push('\u26a0 \u7a0e0%\u21928%\u8ffd\u52a0');
+  if(/KOL/i.test(p.name||''))notes.push('\u26a0 \u53d6\u5f15\u5148\u540d\u8981\u78ba\u8a8d\uff08\u5b9b\u5148\u304c\u5165\u3063\u3066\u3044\u308b\u53ef\u80fd\u6027\uff09');
   if(p.notes)notes.push(p.notes);
   return{id:Date.now()+Math.random(),name:p.name||'',date:p.date||'',invNum:p.invNum||'',subject:p.subject||'',rate:rate,subtotal:sub,wh:wh,exp:exp,deadline:p.deadline||'',payBy:p.payBy||'',tNum:p.tNum||'',bank:p.bank||'',branch:p.branch||'',acType:p.acType||'',acNum:p.acNum||'',acName:p.acName||'',note:notes.join('\u3002'),file:fn};
 }
@@ -615,6 +639,14 @@ function sCfm(){
 }
 function okPQ(){for(var i=0;i<PDQ.length;i++){eT(PDQ[i].tab);D.m[PDQ[i].tab].push(PDQ[i].inv)}AM=PDQ[PDQ.length-1].tab;PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML='';sv();rAll()}
 function canPQ(){PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML=''}
+var openPdfIdx=async function(idx){
+  var v=cL()[idx];if(!v)return;
+  try{
+    var blob=await idbGet('f:'+v.id);
+    if(!blob){alert('\u3053\u306e\u884c\u306ePDF\u306f\u3053\u306e\u30d6\u30e9\u30a6\u30b6\u306b\u4fdd\u5b58\u3055\u308c\u3066\u3044\u307e\u305b\u3093\uff08\u53d6\u8fbc\u3057\u305f\u7aef\u672b\u30fb\u30d6\u30e9\u30a6\u30b6\u3067\u306e\u307f\u958b\u3051\u307e\u3059\uff09');return}
+    var url=URL.createObjectURL(blob);window.open(url,'_blank');
+  }catch(e){alert('PDF\u3092\u958b\u3051\u307e\u305b\u3093\u3067\u3057\u305f: '+e.message)}
+};
 var dz=document.getElementById('DZ');
 dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('drag')});
 dz.addEventListener('dragleave',function(){dz.classList.remove('drag')});
@@ -625,7 +657,7 @@ function doCSV(){
   var h=['No','\u53d6\u5f15\u5148\u540d','\u767a\u884c\u65e5','\u53d7\u7406','\u8acb\u6c42\u66f8\u756a\u53f7','\u4ef6\u540d','\u7a0e\u7387','\u7a0e\u629c\u91d1\u984d','\u6d88\u8cbb\u7a0e','\u6e90\u6cc9\u7a0e','\u5b9f\u8cbb','\u7a0e\u8fbc\u652f\u6255\u984d','\u652f\u6255\u671f\u9650','\u5165\u91d1\u5e0c\u671b\u65e5','\u9069\u683c\u756a\u53f7','\u9280\u884c','\u652f\u5e97','\u53e3\u5ea7\u7a2e\u5225','\u53e3\u5ea7\u756a\u53f7','\u53e3\u5ea7\u540d\u7fa9','\u540c\u4e00\u5148\u5408\u8a08','\u5099\u8003','\u5143\u30d5\u30a1\u30a4\u30eb'];
   var csv='\uFEFF'+h.join(',')+'\n';
   for(var i=0;i<ls.length;i++){var v=ls[i],c=cc(v);csv+=[i+1,'"'+v.name+'"',v.date,'"'+(v.recv||'')+'"',v.invNum,'"'+v.subject+'"',Math.round(v.rate*100)+'%',v.subtotal||0,c.tax,v.wh||'',v.exp||'',c.tot,v.deadline,v.payBy,v.tNum,v.bank,v.branch,v.acType,v.acNum,v.acName,gt[v.id]||'','"'+(v.note||'')+'"','"'+(v.file||'')+'"'].join(',')+'\n'}
-  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='inv_'+AM+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='inv_'+curTab()+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
 // ===== 支払予定（原価連携・管理者のみ / 読取専用） =====
