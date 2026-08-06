@@ -162,6 +162,20 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
     <div id="PM_body" style="font-size:12px"></div>
   </div>
 </div>
+<div class="m-modal" id="FM" onclick="if(event.target===this)closeFM()">
+  <div class="m-modal-box" style="max-width:460px;border-radius:16px;margin:auto;max-height:85vh">
+    <div class="m-modal-hd"><h3>📂 読み込む月を選択</h3><button class="btn" onclick="closeFM()">✕</button></div>
+    <div style="font-size:11px;color:#8a8279;margin-bottom:8px">チェックした月フォルダのPDFだけを読み取ります（表にある同名ファイルは除外済み）</div>
+    <div id="FM_list" style="display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:space-between;align-items:center">
+      <label style="font-size:11px;cursor:pointer"><input type="checkbox" id="FM_all" onchange="fmAll(this.checked)"> 全選択</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeFM()">キャンセル</button>
+        <button class="btn-p" style="padding:8px 20px;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer" onclick="startFolderImport()">選択した月を取込</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="bar">
   <div class="sbox"><span style="color:#8a8279">🔍</span><input placeholder="検索…" id="Q" oninput="rT()"></div>
   <div class="pills"><button class="pill on" onclick="sf('all',this)">すべて</button><button class="pill" onclick="sf('warn',this)">⚠要確認</button><button class="pill" onclick="sf('group',this)">同一先</button></div>
@@ -688,25 +702,11 @@ function rPay(rows){
   document.getElementById('PM_body').innerHTML=h;
 }
 
-// ===== フォルダ自動取込（Chrome/Edge） =====
-var FSK='kolInvSeen';
-function seenSet(){try{return JSON.parse(localStorage.getItem(FSK)||'[]')}catch(e){return[]}}
-function markSeen(n){var s=seenSet();if(s.indexOf(n)<0){s.push(n);try{localStorage.setItem(FSK,JSON.stringify(s.slice(-800)))}catch(e){}}}
+// ===== フォルダ取込（Chrome/Edge・月を選んで手動取込） =====
 function idbOpen(){return new Promise(function(res,rej){var q=indexedDB.open('kolInvFS',1);q.onupgradeneeded=function(){q.result.createObjectStore('h')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error)}})}
 function idbSet(k,v){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=res;tx.onerror=function(){rej(tx.error)}})})}
 function idbGet(k){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readonly');var g=tx.objectStore('h').get(k);g.onsuccess=function(){res(g.result)};g.onerror=function(){rej(g.error)}})})}
-var CUT={y:2026,m:5}; // この月より前の受理フォルダは取込対象外（一括取込時に変更可）
-function cutIdx(){return CUT.y*12+CUT.m}
-function inScope(x){var ym=x.recv||x.pay||x.anchor;return !ym||(ym.y*12+ym.m)>=cutIdx()}
-function askCut(){
-  var d=prompt('何月以降の請求書を取り込みますか？（例: 2026年7月）',yK(CUT));
-  if(d===null)return false;
-  var ym=kY(d.replace(/[\s　]/g,''))||pYM(d);
-  if(ym)CUT=ym;
-  return true;
-}
 var collectPdfs=async function(dir,ctx,out){
-  // ctx = {pay, recv, anchor}  anchor=「YYYY年M月まで」フォルダの年月
   for await (var entry of dir.values()){
     if(entry.kind==='directory'){
       var nm=String(entry.name).replace(/[\s\u3000]/g,'');
@@ -733,73 +733,64 @@ var collectPdfs=async function(dir,ctx,out){
       }
       await collectPdfs(entry,next,out);
     }else if(/\.pdf$/i.test(entry.name)){
-      out.push({e:entry,pay:ctx.pay,recv:ctx.recv,anchor:ctx.anchor});
+      out.push({e:entry,pay:ctx.pay,recv:ctx.recv});
     }
   }
 };
-var scanFolder=async function(h,silent,noRetry){
-  var found=0;
-  try{
-    var seen=seenSet();var known=allInv().map(function(v){return v.file});
-    var all=[];await collectPdfs(h,{pay:null,recv:null,anchor:null},all);
-    var news=all.filter(function(x){return inScope(x)&&seen.indexOf(x.e.name)<0&&known.indexOf(x.e.name)<0});
-    if(news.length>0&&!confirm(news.length+'件の新しいPDFを読み取りますか？\n（1件ごとにAPIクレジットを少し消費します）'))return 0;
-    for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv);found++;await new Promise(function(r){setTimeout(r,1200)})}
-  }catch(e){console.error('scanFolder',e)}
-  if(!silent&&found===0&&!noRetry){
-    var rescan=confirm('\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f\u3002\n\n\u53d6\u8fbc\u6e08\u307f\u306e\u8a18\u9332\u3092\u30ea\u30bb\u30c3\u30c8\u3057\u3066\u3001\u30d5\u30a9\u30eb\u30c0\u5185\u306ePDF\u3092\u8aad\u307f\u76f4\u3057\u307e\u3059\u304b\uff1f\n\uff08\u6b21\u306e\u753b\u9762\u3067\u300c\u4f55\u6708\u4ee5\u964d\u3092\u53d6\u308a\u8fbc\u3080\u304b\u300d\u3092\u6307\u5b9a\u3067\u304d\u307e\u3059\u3002\u8868\u306b\u3042\u308b\u540c\u540d\u30d5\u30a1\u30a4\u30eb\u306f\u91cd\u8907\u3057\u307e\u305b\u3093\uff09');
-    if(rescan){
-      if(!askCut())return found;
-      try{localStorage.removeItem(FSK)}catch(e){}
-      return scanFolder(h,false,true);
-    }
-  }
-  if(!silent&&found===0&&noRetry)alert('\u8aad\u307f\u76f4\u3057\u307e\u3057\u305f\u304c\u3001\u53d6\u8fbc\u5bfe\u8c61\u306ePDF\u304c\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f\uff082025\u5e74\u4ee5\u524d\u306f\u5bfe\u8c61\u5916\u3067\u3059\uff09');
-  return found;
-};
+var FGROUPS={};var FORDER=[];
 var connectFolder=async function(){
-  if(!window.showDirectoryPicker){alert('\u3053\u306e\u6a5f\u80fd\u306fChrome\u307e\u305f\u306fEdge\u3067\u306e\u307f\u4f7f\u3048\u307e\u3059');return}
-  try{
-    var existing=await idbGet('dir').catch(function(){return null});
-    if(existing){
-      var p=await existing.queryPermission({mode:'read'});
-      if(p!=='granted')p=await existing.requestPermission({mode:'read'});
-      if(p==='granted'){scanFolder(existing,false);return}
-    }
-    var h=await window.showDirectoryPicker();
-    await idbSet('dir',h);
-    var all=[];await collectPdfs(h,{pay:null,recv:null,anchor:null},all);
-    var known=allInv().map(function(v){return v.file});
-    var seen=seenSet();
-    var news=all.filter(function(x){return inScope(x)&&seen.indexOf(x.e.name)<0&&known.indexOf(x.e.name)<0});
-    if(news.length===0){alert('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u4eca\u5f8c\u306f\u30a2\u30d7\u30ea\u3092\u958b\u304f\u305f\u3073\u306b\u81ea\u52d5\u3067\u53d6\u8fbc\u307f\u307e\u3059');return}
-    var doNow=confirm('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\n\u672a\u53d6\u8fbc\u306ePDF\u304c'+news.length+'\u4ef6\u3042\u308a\u307e\u3059\uff08\u6708\u30d5\u30a9\u30eb\u30c0\u5185\u306e\u3082\u306e\u306f\u305d\u306e\u6708\u306b\u632f\u5206\uff09\u3002\n\u4eca\u3059\u3050\u5168\u3066\u8aad\u307f\u53d6\u308a\u307e\u3059\u304b\uff1f\n\nOK=\u5168\u3066\u8aad\u53d6\u3000\u30ad\u30e3\u30f3\u30bb\u30eb=\u4eca\u5f8c\u8ffd\u52a0\u3055\u308c\u308b\u5206\u306e\u307f');
-    if(doNow){
-      if(!askCut())return;
-      news=news.filter(inScope);
-      for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv);await new Promise(function(r){setTimeout(r,1200)})}
-    }else{
-      news.forEach(function(x){markSeen(x.e.name)});
-      alert('\u4e86\u89e3\u3067\u3059\u3002\u4eca\u5f8c\u30d5\u30a9\u30eb\u30c0\u306b\u8ffd\u52a0\u3055\u308c\u305fPDF\u304b\u3089\u81ea\u52d5\u53d6\u8fbc\u3057\u307e\u3059');
-    }
-  }catch(e){/* \u30e6\u30fc\u30b6\u30fc\u304c\u30ad\u30e3\u30f3\u30bb\u30eb */}
-};
-var autoScan=async function(){
+  if(!window.showDirectoryPicker){alert('この機能はChromeまたはEdgeでのみ使えます');return}
   try{
     var h=await idbGet('dir').catch(function(){return null});
-    if(!h)return;
-    var p=await h.queryPermission({mode:'read'});
-    if(p==='granted'){scanFolder(h,true)}
-    else{
-      var bar=document.createElement('div');bar.className='info';
-      bar.style.cursor='pointer';bar.style.background='#fff8e6';bar.style.borderColor='#e8d5a0';bar.style.color='#8a6d1a';
-      bar.textContent='\ud83d\udcc2 \u63a5\u7d9a\u6e08\u307f\u30d5\u30a9\u30eb\u30c0\u306e\u81ea\u52d5\u53d6\u8fbc\u3092\u518d\u958b\u3059\u308b\uff08\u30af\u30ea\u30c3\u30af\u3057\u3066\u8a31\u53ef\uff09';
-      bar.onclick=async function(){try{var g=await h.requestPermission({mode:'read'});if(g==='granted'){bar.remove();scanFolder(h,true)}}catch(e){}};
-      var ref=document.querySelector('.info');if(ref)ref.parentNode.insertBefore(bar,ref.nextSibling);
+    if(h){
+      var p=await h.queryPermission({mode:'read'});
+      if(p!=='granted')p=await h.requestPermission({mode:'read'});
+      if(p!=='granted')h=null;
     }
-  }catch(e){console.log('autoScan',e)}
+    if(!h){h=await window.showDirectoryPicker();await idbSet('dir',h)}
+    var all=[];await collectPdfs(h,{pay:null,recv:null,anchor:null},all);
+    var known=allInv().map(function(v){return v.file});
+    var news=all.filter(function(x){return known.indexOf(x.e.name)<0});
+    FGROUPS={};FORDER=[];
+    news.forEach(function(x){
+      var k=x.recv?yK(x.recv):'（月フォルダ外）';
+      if(!FGROUPS[k]){FGROUPS[k]=[];FORDER.push(k)}
+      FGROUPS[k].push(x);
+    });
+    FORDER.sort(function(a,b){
+      var x=kY(a),y=kY(b);
+      if(!x&&!y)return 0;if(!x)return 1;if(!y)return -1;
+      return(y.y*12+y.m)-(x.y*12+x.m); // 新しい月が上
+    });
+    if(!FORDER.length){alert('未取込のPDFはありません（表にある同名ファイルは除外されます）');return}
+    var html='';
+    FORDER.forEach(function(k,i){
+      var tot=FGROUPS[k].length;
+      html+='<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #ddd8cf;border-radius:8px;cursor:pointer;font-size:13px">'
+        +'<input type="checkbox" class="fm-cb" data-k="'+E(k)+'">'
+        +'<span style="font-weight:600">'+E(k)+'</span>'
+        +'<span style="color:#8a8279;font-size:11px;margin-left:auto">'+tot+'件</span></label>';
+    });
+    document.getElementById('FM_list').innerHTML=html;
+    document.getElementById('FM_all').checked=false;
+    document.getElementById('FM').classList.add('open');
+  }catch(e){/* ユーザーがキャンセル */}
 };
-// auto-scan disabled: folder is read ONLY when the folder button is pressed (to save API credits)
+function closeFM(){document.getElementById('FM').classList.remove('open')}
+function fmAll(on){document.querySelectorAll('.fm-cb').forEach(function(c){c.checked=on})}
+var startFolderImport=async function(){
+  var sel=[];document.querySelectorAll('.fm-cb').forEach(function(c){if(c.checked)sel.push(c.dataset.k)});
+  if(!sel.length){alert('取り込む月にチェックを入れてください');return}
+  var files=[];sel.forEach(function(k){(FGROUPS[k]||[]).forEach(function(x){files.push(x)})});
+  if(!confirm(files.length+'件のPDFを読み取りますか？\n（1件ごとにAPIクレジットを少し消費します）'))return;
+  closeFM();
+  for(var i=0;i<files.length;i++){
+    var f=await files[i].e.getFile();
+    doP(f,files[i].pay,files[i].recv);
+    await new Promise(function(r){setTimeout(r,1200)});
+  }
+};
+// 自動スキャンなし: 読取は📂ボタン→月選択→確認 の手動操作のみ
 
 document.addEventListener('click',function(e){if(EC&&!e.target.closest('td.ig'))cE()});
 
