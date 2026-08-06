@@ -1,36 +1,34 @@
-# アップデート手順（kol-seikyu-shiharai）
+# 新機能アップデート手順（v2）
 
-## 変更内容
-1. Supabase同期先を kol-invoice-v2 の専用テーブル app_data に変更（テーブル作成済み・RLS有効）
-2. 同期失敗時に「⚠ 同期エラー（ローカル保存のみ）」と赤字表示（従来は失敗しても同期済表示だった）
-3. 合言葉認証を追加（/api/db と /api/read-pdf の両方を保護）
-4. クラウドが空でローカルにデータがある場合、自動で初回アップロード
-5. package.json に "type": "module" 追加（ビルド時の警告解消）
+## 今回追加された機能
+1. 【請求月】発行日ベースの「請求月」列を表に追加（スマホカードにも表示）
+2. 【自動振分】支払期限も入金希望日も無い請求書は「発行日の翌々月末」を支払期限に自動セット
+   （PDF読取・CSV/JSON取込の両方に適用。手動で編集も可能）
+3. 【古い請求書アラート】発行日が3ヶ月以上前のPDFを取り込むと「どの月に入れますか？」の確認が出る
+4. 【📂フォルダ自動取込】ヘッダーの「📂フォルダ」ボタンで「請求書受理」フォルダを一度接続すると、
+   以降アプリを開くたびに新しいPDFを自動検出→自動読取（Chrome/Edge限定）
+   ※接続した時点でフォルダに入っているPDFは「取込済み扱い」になります（大量誤取込の防止）
+5. 【💰支払予定】案件管理アプリの原価一覧を読取専用で表示（管理者のみ）
+   - 支払日の月ごとに「いつ・誰に・いくら」を一覧表示
+   - 同じ支払先・金額の請求書を受理済みなら「📄あり」、まだなら「⚠未受理」バッジ
 
-## Vercelでの設定（Settings → Environment Variables）
-
-以下の3つを追加・更新してください（Production にチェック）：
+## 事前設定（1つだけ）: 管理者用の合言葉
+Vercel → kol-seikyu-shiharai → Settings → Environment Variables → Add:
 
 | Key | Value |
 |---|---|
-| SUPABASE_URL | https://jqrhrfskfywzfqhztezh.supabase.co |
-| SUPABASE_SERVICE_KEY | Supabaseダッシュボード（kol-invoice-v2）→ Project Settings → API Keys → service_role の secret キー |
-| APP_TOKEN | 好きな合言葉（社内で共有するパスワード。例: kol-2026-xxxx） |
+| ADMIN_TOKEN | 管理者用の合言葉（通常のAPP_TOKENとは別のものにする） |
 
-- ANTHROPIC_API_KEY は既存のままでOK
-- 古い SUPABASE_ANON_KEY が残っていれば削除してOK（SERVICE_KEYがあれば使われません）
+※環境変数を追加したら、ファイルアップロード後のデプロイで自動反映されます。
+（ファイルを上げる前に追加した場合はそのままでOK）
 
-⚠️ service_role キーは絶対にコードやチャットに貼らないでください。Vercelの環境変数にのみ入力します。
+## デプロイ方法（前回と同じ）
+GitHubリポジトリ →「Add file」→「Upload files」→ このフォルダの中身
+（index.html / apiフォルダ / package.json / vercel.json / README.md）をドラッグ → Commit changes
 
-## デプロイ方法
-このフォルダの中身（index.html, api/, package.json, vercel.json, README.md）を
-GitHubリポジトリ main ブランチにそのままアップロード（上書き）→ Vercelが自動デプロイ。
-
-環境変数を追加した後にデプロイした場合はそのままでOK。
-先にデプロイしてしまった場合は Deployments → 最新 → Redeploy してください。
-
-## デプロイ後の確認
-1. 普段使っているブラウザ（最新データがある方）でアプリを開く
-2. 合言葉を聞かれたら APP_TOKEN に設定した値を入力（初回のみ）
-3. 右上が「☁ 同期済」（緑）になればクラウド保存成功
-4. 別のブラウザ/シークレットウィンドウで開いてデータが表示されれば同期完了
+## 使い方メモ（管理者機能）
+- 「💰支払予定」「📂フォルダ」は普段は非表示。ヘッダー右の「⚙」を押して
+  管理者合言葉（ADMIN_TOKEN）を入力すると表示されます（次回からは自動表示）
+- 💰支払予定: 原価一覧を月ごとに表示（読取専用）
+- 📂フォルダ: 「請求書受理」フォルダを選択 →「表示を許可」
+  次回以降、アプリを開いた時に黄色いバーが出たらクリックして許可（Chromeの仕様）

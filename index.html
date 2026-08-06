@@ -105,7 +105,7 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
 <div class="hd">
   <div style="display:flex;align-items:center;gap:8px"><div class="logo">請求書管理<span>KOL株式会社</span></div><span id="syncStatus" style="font-size:10px;color:#2d5a27">☁ 同期済</span></div>
   <div class="hbtns">
-    <button class="btn" onclick="doCSV()">📥CSV</button>
+    <button class="btn" id="payBtn" style="display:none" onclick="openPay()">💰支払予定</button><button class="btn" id="fldBtn" style="display:none" onclick="connectFolder()">📂フォルダ</button><button class="btn" id="admBtn" title="管理者" onclick="adminLogin()">⚙</button><button class="btn" onclick="doCSV()">📥CSV</button>
     <button class="btn" onclick="openImp()">📋インポート</button>
     <button class="btn" onclick="addRow()">＋行追加</button>
     <button class="btn" onclick="reGrp()">🔄振分</button>
@@ -156,6 +156,12 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
     </div>
   </div>
 </div>
+<div class="m-modal" id="PM" onclick="if(event.target===this)closePay()">
+  <div class="m-modal-box" style="max-width:780px;border-radius:16px;margin:auto;max-height:88vh">
+    <div class="m-modal-hd"><h3>💰 支払予定（原価一覧・読取専用）</h3><button class="btn" onclick="closePay()">✕</button></div>
+    <div id="PM_body" style="font-size:12px"></div>
+  </div>
+</div>
 <div class="bar">
   <div class="sbox"><span style="color:#8a8279">🔍</span><input placeholder="検索…" id="Q" oninput="rT()"></div>
   <div class="pills"><button class="pill on" onclick="sf('all',this)">すべて</button><button class="pill" onclick="sf('warn',this)">⚠要確認</button><button class="pill" onclick="sf('group',this)">同一先</button></div>
@@ -191,7 +197,7 @@ var E=function(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').rep
 var SK='kol-invoice-v1';var D={m:{},o:[]};var AM='';var PD=[];var FI='all';var EC=null;
 
 var CL=[
-  {k:'name',l:'取引先',w:120,t:'t'},{k:'date',l:'発行日',w:80,t:'t'},{k:'invNum',l:'請求書No',w:88,t:'t'},{k:'subject',l:'件名',w:140,t:'t'},
+  {k:'name',l:'取引先',w:120,t:'t'},{k:'date',l:'発行日',w:80,t:'t'},{k:'_invM',l:'請求月',w:64,t:'x'},{k:'invNum',l:'請求書No',w:88,t:'t'},{k:'subject',l:'件名',w:140,t:'t'},
   {k:'rate',l:'税率',w:44,t:'s',op:[['0.10','10%'],['0.08','8%']]},{k:'subtotal',l:'税抜金額',w:80,t:'n'},{k:'_tax',l:'消費税',w:66,t:'x'},
   {k:'wh',l:'源泉税',w:66,t:'n'},{k:'exp',l:'実費',w:60,t:'n'},{k:'_tot',l:'税込支払額',w:85,t:'x'},{k:'_grp',l:'同一先',w:70,t:'x'},
   {k:'deadline',l:'支払期限',w:80,t:'t'},{k:'payBy',l:'入金希望',w:80,t:'t'},{k:'tNum',l:'適格番号',w:100,t:'t'},
@@ -207,6 +213,9 @@ function gPM(v){var d=pYM(v.deadline);if(d)return d;var p=pYM(v.payBy);if(p)retu
 function srt(){D.o.sort(function(a,b){var x=kY(a),y=kY(b);return(x.y*12+x.m)-(y.y*12+y.m)})}
 function eT(k){if(!D.m[k]){D.m[k]=[];D.o.push(k);srt()}}
 function cc(v){var t=Math.round((v.subtotal||0)*(v.rate||0));return{tax:t,tot:(v.subtotal||0)+t-(v.wh||0)+(v.exp||0)}}
+function eom(ym){var d=new Date(ym.y,ym.m,0);return ym.y+'/'+('0'+ym.m).slice(-2)+'/'+('0'+d.getDate()).slice(-2)}
+function autoDL(v){if(!v.deadline&&!v.payBy){var t=pYM(v.date);if(t)v.deadline=eom(aM(t,2))}}
+function invMonthsAgo(v){var t=pYM(v.date);if(!t)return 0;var n=new Date();return(n.getFullYear()*12+n.getMonth()+1)-(t.y*12+t.m)}
 function gT(ls){var g={};ls.forEach(function(v){var k=v.name+'|'+v.acNum;if(!g[k])g[k]=[];g[k].push(v)});var o={};Object.keys(g).forEach(function(k){var a=g[k];if(a.length>1){var t=a.reduce(function(s,i){return s+cc(i).tot},0);a.forEach(function(i){o[i.id]=t})}});return o}
 function cL(){return D.m[AM]||[]}
 
@@ -353,7 +362,8 @@ function rT(){
     html+='<tr class="'+(wr?'w':'')+'">';
     html+='<td class="c" style="color:#8a8279;font-size:9px">'+(idx+1)+'</td>';
     for(var j=0;j<CL.length;j++){var col=CL[j];
-      if(col.k==='_tax')html+='<td class="r" style="color:#8a8279">'+F(c.tax)+'</td>';
+      if(col.k==='_invM'){var im=pYM(v.date);html+='<td class="c" style="color:#5c554a;white-space:nowrap;font-size:10px">'+(im?yK(im):'')+'</td>'}
+      else if(col.k==='_tax')html+='<td class="r" style="color:#8a8279">'+F(c.tax)+'</td>';
       else if(col.k==='_tot')html+='<td class="r" style="font-weight:600">'+F(c.tot)+'</td>';
       else if(col.k==='_grp')html+='<td class="r">'+(gv?'<span class="grp">'+F(gv)+'</span>':'')+'</td>';
       else if(col.k==='rate'){var rv=v.rate;var tg=rv===.10?'<span class="tg a">10%</span>':'<span class="tg b">8%</span>';html+='<td class="c ed" data-i="'+idx+'" data-k="rate" onclick="sE(this)">'+tg+'</td>'}
@@ -368,7 +378,7 @@ function rT(){
     html+='</select></td>';
     html+='<td class="c"><button class="btn-d" onclick="dR('+idx+')">✕</button></td></tr>';
   }
-  html+='<tr class="trow"><td></td><td colspan="4"><b>\u5408\u8a08</b></td><td class="r">'+F(tS)+'</td><td class="r">'+F(tT)+'</td><td class="r">'+F(tW)+'</td><td class="r">'+F(tE)+'</td><td class="r" style="font-size:12px">'+F(tP)+'</td><td colspan="'+(CL.length-9+2)+'"></td></tr>';
+  html+='<tr class="trow"><td></td><td colspan="5"><b>\u5408\u8a08</b></td><td class="r">'+F(tS)+'</td><td class="r">'+F(tT)+'</td><td class="r">'+F(tW)+'</td><td class="r">'+F(tE)+'</td><td class="r" style="font-size:12px">'+F(tP)+'</td><td colspan="'+(CL.length-9+2)+'"></td></tr>';
   document.getElementById('TB').innerHTML=html;
 }
 
@@ -387,6 +397,7 @@ function rMC(){
     h+='<div class="m-card-sub">'+E(v.subject||'')+(v.date?' \u30fb '+v.date:'')+'</div>';
     h+='<dl class="m-card-grid">';
     h+='<dt>\u7a0e\u7387</dt><dd>'+(v.rate===.10?'<span class="tg a">10%</span>':'<span class="tg b">8%</span>')+'</dd>';
+    var imm=pYM(v.date);if(imm)h+='<dt>\u8acb\u6c42\u6708</dt><dd>'+yK(imm)+'</dd>';
     h+='<dt>\u7a0e\u629c</dt><dd>'+F(v.subtotal)+'</dd>';
     h+='<dt>\u6d88\u8cbb\u7a0e</dt><dd>'+F(c.tax)+'</dd>';
     if(v.wh)h+='<dt>\u6e90\u6cc9\u7a0e</dt><dd>-'+F(v.wh)+'</dd>';
@@ -508,7 +519,7 @@ function importArr(arr){
     if(typeof v.subtotal==='string')v.subtotal=parseInt(v.subtotal.replace(/[,\s]/g,''))||0;
     if(typeof v.wh==='string')v.wh=parseInt(v.wh.replace(/[,\s]/g,''))||null;
     if(typeof v.exp==='string')v.exp=parseInt(v.exp.replace(/[,\s]/g,''))||null;
-    var ym=gPM(v);var k=yK(ym);eT(k);D.m[k].push(v);count++;
+    autoDL(v);var ym=gPM(v);var k=yK(ym);eT(k);D.m[k].push(v);count++;
   }
   return count;
 }
@@ -549,7 +560,11 @@ function doP(file){
     apiFetch('/api/read-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf_base64:b})})
     .then(function(r){if(!r.ok)throw new Error('API error '+r.status);return r.json()})
     .then(function(p){
-      var inv=apR(p,file.name);var ym=gPM(inv);var k=yK(ym);
+      var inv=apR(p,file.name);autoDL(inv);var ym=gPM(inv);var k=yK(ym);
+      if(invMonthsAgo(inv)>=3){
+        var ans=prompt('\u26a0 '+(p.name||file.name)+' \u306f\u767a\u884c\u65e5('+(inv.date||'\u4e0d\u660e')+')\u304c3\u30f6\u6708\u4ee5\u4e0a\u524d\u306e\u8acb\u6c42\u66f8\u3067\u3059\u3002\n\u3069\u306e\u6708\u306e\u30bf\u30d6\u306b\u5165\u308c\u307e\u3059\u304b\uff1f',k);
+        if(ans){var chk=kY(ans.replace(/\s/g,''));if(chk)k=yK(chk)}
+      }
       PDQ.push({inv:inv,tab:k});
       el.className='proc ok';el.innerHTML='<span>\u2705 '+E(p.name)+' \u2192 '+k+' \u00a5'+F(cc(inv).tot)+'</span>';sCfm();
     }).catch(function(e){console.error(e);el.className='proc ng';el.innerHTML='<span>\u274c '+E(file.name)+': '+e.message+'</span>'})};
@@ -584,6 +599,131 @@ function doCSV(){
   for(var i=0;i<ls.length;i++){var v=ls[i],c=cc(v);csv+=[i+1,'"'+v.name+'"',v.date,v.invNum,'"'+v.subject+'"',Math.round(v.rate*100)+'%',v.subtotal||0,c.tax,v.wh||'',v.exp||'',c.tot,v.deadline,v.payBy,v.tNum,v.bank,v.branch,v.acType,v.acNum,v.acName,gt[v.id]||'','"'+(v.note||'')+'"','"'+(v.file||'')+'"'].join(',')+'\n'}
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='inv_'+AM+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
+
+// ===== 支払予定（原価連携・管理者のみ / 読取専用） =====
+var ATK='kolInvAdmTok';
+function atok(){try{return localStorage.getItem(ATK)||''}catch(e){return ''}}
+function showAdminUI(on){
+  var p=document.getElementById('payBtn'),f=document.getElementById('fldBtn');
+  if(p)p.style.display=on?'':'none';if(f)f.style.display=on?'':'none';
+}
+function verifyAdmin(cb){
+  if(!atok()){cb(false);return}
+  fetch('/api/genka?ping=1',{headers:{'x-admin-token':atok()}})
+    .then(function(r){cb(r.ok)})
+    .catch(function(){cb(false)});
+}
+function adminLogin(){
+  if(atok()){verifyAdmin(function(ok){
+    if(ok){showAdminUI(true);return}
+    try{localStorage.removeItem(ATK)}catch(e){};adminLogin();
+  });return}
+  var t=prompt('管理者用の合言葉を入力してください');
+  if(!t||!t.trim())return;
+  try{localStorage.setItem(ATK,t.trim())}catch(e){}
+  verifyAdmin(function(ok){
+    if(ok){showAdminUI(true)}
+    else{try{localStorage.removeItem(ATK)}catch(e){};alert('合言葉が違います');showAdminUI(false)}
+  });
+}
+verifyAdmin(function(ok){if(ok)showAdminUI(true)});
+function openPay(){
+  if(!atok()){adminLogin();return}
+  document.getElementById('PM').classList.add('open');
+  document.getElementById('PM_body').innerHTML='<div class="empty">読み込み中…</div>';
+  fetch('/api/genka',{headers:{'x-admin-token':atok()}}).then(function(r){
+    if(r.status===401){try{localStorage.removeItem(ATK)}catch(e){}
+      document.getElementById('PM_body').innerHTML='<div class="empty" style="color:#c4371c">管理者用の合言葉が違います。閉じてもう一度開いてください。</div>';return null}
+    if(!r.ok)throw new Error('取得失敗 '+r.status);
+    return r.json();
+  }).then(function(res){if(res)rPay(res.rows||[])})
+  .catch(function(e){document.getElementById('PM_body').innerHTML='<div class="empty" style="color:#c4371c">'+E(e.message)+'</div>'});
+}
+function closePay(){document.getElementById('PM').classList.remove('open')}
+function nrm(s){return String(s||'').replace(/[\s\u3000]/g,'').replace(/株式会社|（株）|\(株\)|合同会社|カ\)|カ）/g,'').toLowerCase()}
+function allInv(){var a=[];for(var i=0;i<D.o.length;i++){var arr=D.m[D.o[i]]||[];for(var j=0;j<arr.length;j++)a.push(arr[j])}return a}
+function rPay(rows){
+  var inv=allInv();
+  var byM={},order=[];
+  rows.forEach(function(g){
+    var ym=pYM(g.pay_date)||pYM(g.date);var k=ym?yK(ym):'日付未定';
+    if(!byM[k]){byM[k]=[];order.push(k)}byM[k].push(g);
+  });
+  order.sort(function(a,b){var x=kY(a),y=kY(b);if(!x)return 1;if(!y)return -1;return(x.y*12+x.m)-(y.y*12+y.m)});
+  var h='';
+  order.forEach(function(k){
+    var arr=byM[k],tot=0,rowsH='';
+    arr.forEach(function(g){
+      var amt=Number(g.amount)||0;tot+=amt;
+      var m=inv.some(function(v){if(nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===(v.subtotal||0)});
+      rowsH+='<tr><td style="white-space:nowrap">'+E(g.pay_date||g.date||'')+'</td><td>'+E(g.supplier||'')+'</td><td>'+E(g.item||'')+'</td><td class="r">'+F(amt)+'</td><td class="c">'+(m?'<span class="tg a">\ud83d\udcc4\u3042\u308a</span>':'<span class="tg" style="background:#fef3f0;color:#c4371c">\u26a0\u672a\u53d7\u7406</span>')+'</td></tr>';
+    });
+    h+='<div style="margin:14px 0 4px;font-weight:700">'+E(k)+' <span style="color:#8a8279;font-weight:400">'+arr.length+'件</span> <span style="font-family:\'JetBrains Mono\',monospace;color:#2d5a27">\u00a5'+F(tot)+'</span></div>';
+    h+='<div class="tc"><table><thead><tr><th>支払日</th><th>支払先</th><th>内容</th><th class="r">金額</th><th>請求書</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
+  });
+  if(!h)h='<div class="empty">原価データがありません</div>';
+  h='<div style="font-size:10px;color:#8a8279;margin-bottom:4px">案件管理アプリの原価一覧を読取専用で表示しています。「\ud83d\udcc4あり」= 同じ支払先・金額の請求書を受理済み</div>'+h;
+  document.getElementById('PM_body').innerHTML=h;
+}
+
+// ===== フォルダ自動取込（Chrome/Edge） =====
+var FSK='kolInvSeen';
+function seenSet(){try{return JSON.parse(localStorage.getItem(FSK)||'[]')}catch(e){return[]}}
+function markSeen(n){var s=seenSet();if(s.indexOf(n)<0){s.push(n);try{localStorage.setItem(FSK,JSON.stringify(s.slice(-800)))}catch(e){}}}
+function idbOpen(){return new Promise(function(res,rej){var q=indexedDB.open('kolInvFS',1);q.onupgradeneeded=function(){q.result.createObjectStore('h')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error)}})}
+function idbSet(k,v){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=res;tx.onerror=function(){rej(tx.error)}})})}
+function idbGet(k){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readonly');var g=tx.objectStore('h').get(k);g.onsuccess=function(){res(g.result)};g.onerror=function(){rej(g.error)}})})}
+var scanFolder=async function(h,silent){
+  var found=0;
+  try{
+    var seen=seenSet();var known=allInv().map(function(v){return v.file});
+    var news=[];
+    for await (var entry of h.values()){
+      if(entry.kind!=='file'||!/\.pdf$/i.test(entry.name))continue;
+      if(seen.indexOf(entry.name)>=0||known.indexOf(entry.name)>=0)continue;
+      news.push(entry);
+    }
+    for(var i=0;i<news.length;i++){var f=await news[i].getFile();markSeen(news[i].name);doP(f);found++}
+  }catch(e){console.error('scanFolder',e)}
+  if(!silent&&found===0)alert('\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f');
+  return found;
+};
+var connectFolder=async function(){
+  if(!window.showDirectoryPicker){alert('\u3053\u306e\u6a5f\u80fd\u306fChrome\u307e\u305f\u306fEdge\u3067\u306e\u307f\u4f7f\u3048\u307e\u3059');return}
+  try{
+    var existing=await idbGet('dir').catch(function(){return null});
+    if(existing){
+      var p=await existing.queryPermission({mode:'read'});
+      if(p!=='granted')p=await existing.requestPermission({mode:'read'});
+      if(p==='granted'){scanFolder(existing,false);return}
+    }
+    var h=await window.showDirectoryPicker();
+    await idbSet('dir',h);
+    // 初回接続: いまフォルダにあるPDFは既存扱いにして誤爆連発を防ぐ
+    var cnt=0;
+    for await (var entry of h.values()){
+      if(entry.kind==='file'&&/\.pdf$/i.test(entry.name)){markSeen(entry.name);cnt++}
+    }
+    alert('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\n\u4eca\u5f8c\u306f\u30a2\u30d7\u30ea\u3092\u958b\u304f\u305f\u3073\u306b\u65b0\u3057\u304f\u8ffd\u52a0\u3055\u308c\u305fPDF\u3092\u81ea\u52d5\u3067\u8aad\u307f\u53d6\u308a\u307e\u3059\u3002\n\uff08\u73fe\u5728\u5165\u3063\u3066\u3044\u308b'+cnt+'\u4ef6\u306f\u53d6\u8fbc\u6e08\u307f\u6271\u3044\u3067\u3059\u3002\u5fc5\u8981\u306a\u3082\u306e\u306f\u5f93\u6765\u901a\u308a\u30c9\u30e9\u30c3\u30b0\u3067\u53d6\u8fbc\u3081\u307e\u3059\uff09');
+  }catch(e){/* ユーザーがキャンセル */}
+};
+var autoScan=async function(){
+  try{
+    var h=await idbGet('dir').catch(function(){return null});
+    if(!h)return;
+    var p=await h.queryPermission({mode:'read'});
+    if(p==='granted'){scanFolder(h,true)}
+    else{
+      var bar=document.createElement('div');bar.className='info';
+      bar.style.cursor='pointer';bar.style.background='#fff8e6';bar.style.borderColor='#e8d5a0';bar.style.color='#8a6d1a';
+      bar.textContent='\ud83d\udcc2 \u63a5\u7d9a\u6e08\u307f\u30d5\u30a9\u30eb\u30c0\u306e\u81ea\u52d5\u53d6\u8fbc\u3092\u518d\u958b\u3059\u308b\uff08\u30af\u30ea\u30c3\u30af\u3057\u3066\u8a31\u53ef\uff09';
+      bar.onclick=async function(){try{var g=await h.requestPermission({mode:'read'});if(g==='granted'){bar.remove();scanFolder(h,true)}}catch(e){}};
+      var ref=document.querySelector('.info');if(ref)ref.parentNode.insertBefore(bar,ref.nextSibling);
+    }
+  }catch(e){console.log('autoScan',e)}
+};
+verifyAdmin(function(ok){if(ok)autoScan()});
+
 document.addEventListener('click',function(e){if(EC&&!e.target.closest('td.ig'))cE()});
 
 }catch(err){document.body.innerHTML='<div style="padding:40px;color:red"><h2>Error</h2><pre>'+err.message+'</pre></div>'}
