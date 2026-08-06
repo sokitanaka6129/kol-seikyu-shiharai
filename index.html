@@ -715,7 +715,7 @@ var collectPdfs=async function(dir,ctx,out){
     }
   }
 };
-var scanFolder=async function(h,silent){
+var scanFolder=async function(h,silent,noRetry){
   var found=0;
   try{
     var seen=seenSet();var known=allInv().map(function(v){return v.file});
@@ -723,7 +723,14 @@ var scanFolder=async function(h,silent){
     var news=all.filter(function(x){return inScope(x)&&seen.indexOf(x.e.name)<0&&known.indexOf(x.e.name)<0});
     for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv);found++}
   }catch(e){console.error('scanFolder',e)}
-  if(!silent&&found===0)alert('\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f');
+  if(!silent&&found===0&&!noRetry){
+    var rescan=confirm('\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f\u3002\n\n\u53d6\u8fbc\u6e08\u307f\u306e\u8a18\u9332\u3092\u30ea\u30bb\u30c3\u30c8\u3057\u3066\u3001\u30d5\u30a9\u30eb\u30c0\u5185\u306e\u5168PDF\uff082026\u5e74\u4ee5\u964d\uff09\u3092\u8aad\u307f\u76f4\u3057\u307e\u3059\u304b\uff1f\n\uff08\u3059\u3067\u306b\u8868\u306b\u3042\u308b\u540c\u540d\u30d5\u30a1\u30a4\u30eb\u306f\u91cd\u8907\u3057\u307e\u305b\u3093\uff09');
+    if(rescan){
+      try{localStorage.removeItem(FSK)}catch(e){}
+      return scanFolder(h,false,true);
+    }
+  }
+  if(!silent&&found===0&&noRetry)alert('\u8aad\u307f\u76f4\u3057\u307e\u3057\u305f\u304c\u3001\u53d6\u8fbc\u5bfe\u8c61\u306ePDF\u304c\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f\uff082025\u5e74\u4ee5\u524d\u306f\u5bfe\u8c61\u5916\u3067\u3059\uff09');
   return found;
 };
 var connectFolder=async function(){
