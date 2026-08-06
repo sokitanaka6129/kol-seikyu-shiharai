@@ -25,16 +25,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 読取専用: 案件管理アプリの原価一覧を SELECT するだけ（書き込みは一切しない）
-    const r = await fetch(
-      `${url}/rest/v1/genka?select=id,anken_id,date,item,supplier,amount,pay_date&order=pay_date.asc.nullslast&limit=1000`,
-      { headers: { 'apikey': key, 'Authorization': `Bearer ${key}` } }
-    );
-    if (!r.ok) {
-      const err = await r.text();
-      return res.status(r.status).json({ error: err });
+    // 読取専用: 案件管理アプリの原価一覧と案件情報を SELECT するだけ（書き込みは一切しない）
+    const headers = { 'apikey': key, 'Authorization': `Bearer ${key}` };
+    const [rG, rA] = await Promise.all([
+      fetch(`${url}/rest/v1/genka?select=id,anken_id,date,item,supplier,amount,pay_date&order=pay_date.asc.nullslast&limit=1000`, { headers }),
+      fetch(`${url}/rest/v1/ankens?select=id,company,ip&limit=1000`, { headers })
+    ]);
+    if (!rG.ok) {
+      const err = await rG.text();
+      return res.status(rG.status).json({ error: err });
     }
-    const rows = await r.json();
+    const rows = await rG.json();
+    const ankens = rA.ok ? await rA.json() : [];
+    const map = {};
+    for (const a of ankens) map[a.id] = a;
+    for (const g of rows) {
+      const a = map[g.anken_id];
+      g.anken_company = a ? a.company : '';
+      g.anken_ip = a ? a.ip : '';
+    }
     return res.status(200).json({ rows });
   } catch (e) {
     return res.status(500).json({ error: e.message });

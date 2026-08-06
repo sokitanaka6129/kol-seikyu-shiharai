@@ -174,6 +174,7 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
     <div class="m-form">
       <div class="m-fi"><label>取引先名</label><input id="mm_name"></div>
       <div class="m-fi-row"><div class="m-fi"><label>発行日</label><input id="mm_date" placeholder="2026/03/01"></div><div class="m-fi"><label>請求書番号</label><input id="mm_invNum"></div></div>
+      <div class="m-fi"><label>受理（月 or 日付）</label><input id="mm_recv" placeholder="2026年7月 / 2026/07/15"></div>
       <div class="m-fi"><label>件名/内容</label><input id="mm_subject"></div>
       <div class="m-fi-row"><div class="m-fi"><label>税率</label><select id="mm_rate" onchange="mCalc()"><option value="0.10">10%</option><option value="0.08">8%</option></select></div><div class="m-fi"><label>税抜金額</label><input type="number" id="mm_subtotal" oninput="mCalc()"></div></div>
       <div class="m-fi-row"><div class="m-fi"><label>源泉税</label><input type="number" id="mm_wh" oninput="mCalc()"></div><div class="m-fi"><label>実費/経費</label><input type="number" id="mm_exp" oninput="mCalc()"></div></div>
@@ -197,7 +198,7 @@ var E=function(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').rep
 var SK='kol-invoice-v1';var D={m:{},o:[]};var AM='';var PD=[];var FI='all';var EC=null;
 
 var CL=[
-  {k:'name',l:'取引先',w:120,t:'t'},{k:'date',l:'発行日',w:80,t:'t'},{k:'_invM',l:'請求月',w:64,t:'x'},{k:'invNum',l:'請求書No',w:88,t:'t'},{k:'subject',l:'件名',w:140,t:'t'},
+  {k:'name',l:'取引先',w:120,t:'t'},{k:'date',l:'発行日',w:80,t:'t'},{k:'_invM',l:'請求月',w:64,t:'x'},{k:'recv',l:'受理',w:76,t:'t'},{k:'invNum',l:'請求書No',w:88,t:'t'},{k:'subject',l:'件名',w:140,t:'t'},
   {k:'rate',l:'税率',w:44,t:'s',op:[['0.10','10%'],['0.08','8%']]},{k:'subtotal',l:'税抜金額',w:80,t:'n'},{k:'_tax',l:'消費税',w:66,t:'x'},
   {k:'wh',l:'源泉税',w:66,t:'n'},{k:'exp',l:'実費',w:60,t:'n'},{k:'_tot',l:'税込支払額',w:85,t:'x'},{k:'_grp',l:'同一先',w:70,t:'x'},
   {k:'deadline',l:'支払期限',w:80,t:'t'},{k:'payBy',l:'入金希望',w:80,t:'t'},{k:'tNum',l:'適格番号',w:100,t:'t'},
@@ -216,6 +217,8 @@ function cc(v){var t=Math.round((v.subtotal||0)*(v.rate||0));return{tax:t,tot:(v
 function eom(ym){var d=new Date(ym.y,ym.m,0);return ym.y+'/'+('0'+ym.m).slice(-2)+'/'+('0'+d.getDate()).slice(-2)}
 function autoDL(v){if(!v.deadline&&!v.payBy){var t=pYM(v.date);if(t)v.deadline=eom(aM(t,2))}}
 function invMonthsAgo(v){var t=pYM(v.date);if(!t)return 0;var n=new Date();return(n.getFullYear()*12+n.getMonth()+1)-(t.y*12+t.m)}
+function todayStr(){var n=new Date();return n.getFullYear()+'/'+('0'+(n.getMonth()+1)).slice(-2)+'/'+('0'+n.getDate()).slice(-2)}
+function nearYear(m){var n=new Date();var ni=n.getFullYear()*12+n.getMonth()+1;var best=null,bd=1e9;[n.getFullYear()-1,n.getFullYear(),n.getFullYear()+1].forEach(function(y){var d=Math.abs(y*12+m-ni);if(d<bd||(d===bd&&y*12+m>=ni)){bd=d;best=y}});return best}
 function gT(ls){var g={};ls.forEach(function(v){var k=v.name+'|'+v.acNum;if(!g[k])g[k]=[];g[k].push(v)});var o={};Object.keys(g).forEach(function(k){var a=g[k];if(a.length>1){var t=a.reduce(function(s,i){return s+cc(i).tot},0);a.forEach(function(i){o[i.id]=t})}});return o}
 function cL(){return D.m[AM]||[]}
 
@@ -378,7 +381,7 @@ function rT(){
     html+='</select></td>';
     html+='<td class="c"><button class="btn-d" onclick="dR('+idx+')">✕</button></td></tr>';
   }
-  html+='<tr class="trow"><td></td><td colspan="5"><b>\u5408\u8a08</b></td><td class="r">'+F(tS)+'</td><td class="r">'+F(tT)+'</td><td class="r">'+F(tW)+'</td><td class="r">'+F(tE)+'</td><td class="r" style="font-size:12px">'+F(tP)+'</td><td colspan="'+(CL.length-9+2)+'"></td></tr>';
+  html+='<tr class="trow"><td></td><td colspan="6"><b>\u5408\u8a08</b></td><td class="r">'+F(tS)+'</td><td class="r">'+F(tT)+'</td><td class="r">'+F(tW)+'</td><td class="r">'+F(tE)+'</td><td class="r" style="font-size:12px">'+F(tP)+'</td><td colspan="'+(CL.length-9+2)+'"></td></tr>';
   document.getElementById('TB').innerHTML=html;
 }
 
@@ -398,6 +401,7 @@ function rMC(){
     h+='<dl class="m-card-grid">';
     h+='<dt>\u7a0e\u7387</dt><dd>'+(v.rate===.10?'<span class="tg a">10%</span>':'<span class="tg b">8%</span>')+'</dd>';
     var imm=pYM(v.date);if(imm)h+='<dt>\u8acb\u6c42\u6708</dt><dd>'+yK(imm)+'</dd>';
+    if(v.recv)h+='<dt>\u53d7\u7406</dt><dd>'+E(v.recv)+'</dd>';
     h+='<dt>\u7a0e\u629c</dt><dd>'+F(v.subtotal)+'</dd>';
     h+='<dt>\u6d88\u8cbb\u7a0e</dt><dd>'+F(c.tax)+'</dd>';
     if(v.wh)h+='<dt>\u6e90\u6cc9\u7a0e</dt><dd>-'+F(v.wh)+'</dd>';
@@ -419,7 +423,7 @@ function rMC(){
 function openMM(idx){
   mmIdx=idx;var v=cL()[idx];
   document.getElementById('MM_title').textContent=v.name||'\u65b0\u898f';
-  var fields=['name','date','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
+  var fields=['name','date','recv','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
   fields.forEach(function(f){document.getElementById('mm_'+f).value=v[f]||''});
   document.getElementById('mm_rate').value=String(v.rate||0.08);
   document.getElementById('mm_subtotal').value=v.subtotal||'';
@@ -438,7 +442,7 @@ function mCalc(){
 }
 function saveMM(){
   if(mmIdx===null)return;var v=cL()[mmIdx];
-  var fields=['name','date','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
+  var fields=['name','date','recv','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
   fields.forEach(function(f){v[f]=document.getElementById('mm_'+f).value});
   v.rate=parseFloat(document.getElementById('mm_rate').value);
   v.subtotal=parseInt(document.getElementById('mm_subtotal').value)||0;
@@ -528,7 +532,7 @@ function parseCsv(txt){
   var lines=txt.split(/\r?\n/).filter(function(l){return l.trim()});
   if(lines.length<2)return[];
   var hdr=csvSplit(lines[0]);
-  var MAP={'\u53d6\u5f15\u5148\u540d':'name','\u53d6\u5f15\u5148':'name','\u53d6\u5f15\u5148\u540d\uff08\u652f\u6255\u5148\uff09':'name','\u767a\u884c\u65e5':'date','\u8acb\u6c42\u66f8\u756a\u53f7':'invNum','\u8acb\u6c42\u66f8No':'invNum','\u4ef6\u540d':'subject','\u4ef6\u540d/\u5185\u5bb9':'subject','\u7a0e\u7387':'rate','\u7a0e\u629c\u91d1\u984d':'subtotal','\u6e90\u6cc9\u7a0e':'wh','\u6e90\u6cc9':'wh','\u5b9f\u8cbb':'exp','\u5b9f\u8cbb/\u7d4c\u8cbb\uff08\u7a0e\u306a\u3057\uff09':'exp','\u652f\u6255\u671f\u9650':'deadline','\u5165\u91d1\u5e0c\u671b\u65e5':'payBy','\u5165\u91d1\u5e0c\u671b':'payBy','\u5165\u91d1\u5e0c\u671b\u65e5/\u632f\u8fbc\u671f\u9650\uff08\u8acb\u6c42\u66f8\u8a18\u8f09\uff09':'payBy','\u9069\u683c\u756a\u53f7':'tNum','\u9069\u683c\u756a\u53f7\uff08\u767b\u9332\u756a\u53f7\uff09':'tNum','\u9280\u884c':'bank','\u632f\u8fbc\u5148\u9280\u884c':'bank','\u652f\u5e97':'branch','\u53e3\u5ea7\u7a2e\u5225':'acType','\u7a2e\u5225':'acType','\u53e3\u5ea7\u756a\u53f7':'acNum','\u53e3\u5ea7\u540d\u7fa9':'acName','\u5099\u8003':'note','\u5099\u8003/\u30e1\u30e2':'note','\u5143\u30d5\u30a1\u30a4\u30eb':'file'};
+  var MAP={'\u53d6\u5f15\u5148\u540d':'name','\u53d6\u5f15\u5148':'name','\u53d6\u5f15\u5148\u540d\uff08\u652f\u6255\u5148\uff09':'name','\u767a\u884c\u65e5':'date','\u8acb\u6c42\u66f8\u756a\u53f7':'invNum','\u8acb\u6c42\u66f8No':'invNum','\u4ef6\u540d':'subject','\u4ef6\u540d/\u5185\u5bb9':'subject','\u7a0e\u7387':'rate','\u7a0e\u629c\u91d1\u984d':'subtotal','\u6e90\u6cc9\u7a0e':'wh','\u6e90\u6cc9':'wh','\u5b9f\u8cbb':'exp','\u5b9f\u8cbb/\u7d4c\u8cbb\uff08\u7a0e\u306a\u3057\uff09':'exp','\u652f\u6255\u671f\u9650':'deadline','\u5165\u91d1\u5e0c\u671b\u65e5':'payBy','\u5165\u91d1\u5e0c\u671b':'payBy','\u5165\u91d1\u5e0c\u671b\u65e5/\u632f\u8fbc\u671f\u9650\uff08\u8acb\u6c42\u66f8\u8a18\u8f09\uff09':'payBy','\u9069\u683c\u756a\u53f7':'tNum','\u9069\u683c\u756a\u53f7\uff08\u767b\u9332\u756a\u53f7\uff09':'tNum','\u9280\u884c':'bank','\u632f\u8fbc\u5148\u9280\u884c':'bank','\u652f\u5e97':'branch','\u53e3\u5ea7\u7a2e\u5225':'acType','\u7a2e\u5225':'acType','\u53e3\u5ea7\u756a\u53f7':'acNum','\u53e3\u5ea7\u540d\u7fa9':'acName','\u53d7\u7406':'recv','\u5099\u8003':'note','\u5099\u8003/\u30e1\u30e2':'note','\u5143\u30d5\u30a1\u30a4\u30eb':'file'};
   var keys=[];for(var i=0;i<hdr.length;i++){var h=hdr[i].trim();keys.push(MAP[h]||null)}
   var results=[];
   for(var r=1;r<lines.length;r++){
@@ -554,14 +558,18 @@ function csvSplit(line){
 // ===== PDF AUTO-READ via API =====
 var PDQ=[];
 function onPF(files){for(var i=0;i<files.length;i++)if(files[i].type==='application/pdf')doP(files[i]);document.getElementById('FI').value=''}
-function doP(file){
+function doP(file,forcedPay,recvYM){
   var el=document.createElement('div');el.className='proc';el.innerHTML='<div class="spin"></div><span>'+E(file.name)+' 読取中…</span>';document.getElementById('PR').appendChild(el);
   var rd=new FileReader();rd.onload=function(){var b=rd.result.split(',')[1];
     apiFetch('/api/read-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf_base64:b})})
     .then(function(r){if(!r.ok)throw new Error('API error '+r.status);return r.json()})
     .then(function(p){
-      var inv=apR(p,file.name);autoDL(inv);var ym=gPM(inv);var k=yK(ym);
-      if(invMonthsAgo(inv)>=3){
+      var inv=apR(p,file.name);
+      inv.recv=recvYM?yK(recvYM):todayStr();
+      if(forcedPay&&!inv.deadline&&!inv.payBy)inv.deadline=eom(forcedPay);
+      autoDL(inv);var ym=gPM(inv);var k=yK(ym);
+      if(forcedPay)k=yK(forcedPay);
+      if(!forcedPay&&invMonthsAgo(inv)>=3){
         var ans=prompt('\u26a0 '+(p.name||file.name)+' \u306f\u767a\u884c\u65e5('+(inv.date||'\u4e0d\u660e')+')\u304c3\u30f6\u6708\u4ee5\u4e0a\u524d\u306e\u8acb\u6c42\u66f8\u3067\u3059\u3002\n\u3069\u306e\u6708\u306e\u30bf\u30d6\u306b\u5165\u308c\u307e\u3059\u304b\uff1f',k);
         if(ans){var chk=kY(ans.replace(/\s/g,''));if(chk)k=yK(chk)}
       }
@@ -594,9 +602,9 @@ dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('d
 
 function doCSV(){
   var ls=cL(),gt=gT(ls);
-  var h=['No','\u53d6\u5f15\u5148\u540d','\u767a\u884c\u65e5','\u8acb\u6c42\u66f8\u756a\u53f7','\u4ef6\u540d','\u7a0e\u7387','\u7a0e\u629c\u91d1\u984d','\u6d88\u8cbb\u7a0e','\u6e90\u6cc9\u7a0e','\u5b9f\u8cbb','\u7a0e\u8fbc\u652f\u6255\u984d','\u652f\u6255\u671f\u9650','\u5165\u91d1\u5e0c\u671b\u65e5','\u9069\u683c\u756a\u53f7','\u9280\u884c','\u652f\u5e97','\u53e3\u5ea7\u7a2e\u5225','\u53e3\u5ea7\u756a\u53f7','\u53e3\u5ea7\u540d\u7fa9','\u540c\u4e00\u5148\u5408\u8a08','\u5099\u8003','\u5143\u30d5\u30a1\u30a4\u30eb'];
+  var h=['No','\u53d6\u5f15\u5148\u540d','\u767a\u884c\u65e5','\u53d7\u7406','\u8acb\u6c42\u66f8\u756a\u53f7','\u4ef6\u540d','\u7a0e\u7387','\u7a0e\u629c\u91d1\u984d','\u6d88\u8cbb\u7a0e','\u6e90\u6cc9\u7a0e','\u5b9f\u8cbb','\u7a0e\u8fbc\u652f\u6255\u984d','\u652f\u6255\u671f\u9650','\u5165\u91d1\u5e0c\u671b\u65e5','\u9069\u683c\u756a\u53f7','\u9280\u884c','\u652f\u5e97','\u53e3\u5ea7\u7a2e\u5225','\u53e3\u5ea7\u756a\u53f7','\u53e3\u5ea7\u540d\u7fa9','\u540c\u4e00\u5148\u5408\u8a08','\u5099\u8003','\u5143\u30d5\u30a1\u30a4\u30eb'];
   var csv='\uFEFF'+h.join(',')+'\n';
-  for(var i=0;i<ls.length;i++){var v=ls[i],c=cc(v);csv+=[i+1,'"'+v.name+'"',v.date,v.invNum,'"'+v.subject+'"',Math.round(v.rate*100)+'%',v.subtotal||0,c.tax,v.wh||'',v.exp||'',c.tot,v.deadline,v.payBy,v.tNum,v.bank,v.branch,v.acType,v.acNum,v.acName,gt[v.id]||'','"'+(v.note||'')+'"','"'+(v.file||'')+'"'].join(',')+'\n'}
+  for(var i=0;i<ls.length;i++){var v=ls[i],c=cc(v);csv+=[i+1,'"'+v.name+'"',v.date,'"'+(v.recv||'')+'"',v.invNum,'"'+v.subject+'"',Math.round(v.rate*100)+'%',v.subtotal||0,c.tax,v.wh||'',v.exp||'',c.tot,v.deadline,v.payBy,v.tNum,v.bank,v.branch,v.acType,v.acNum,v.acName,gt[v.id]||'','"'+(v.note||'')+'"','"'+(v.file||'')+'"'].join(',')+'\n'}
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='inv_'+AM+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
@@ -642,11 +650,16 @@ function openPay(){
 function closePay(){document.getElementById('PM').classList.remove('open')}
 function nrm(s){return String(s||'').replace(/[\s\u3000]/g,'').replace(/株式会社|（株）|\(株\)|合同会社|カ\)|カ）/g,'').toLowerCase()}
 function allInv(){var a=[];for(var i=0;i<D.o.length;i++){var arr=D.m[D.o[i]]||[];for(var j=0;j<arr.length;j++)a.push(arr[j])}return a}
+var lastGenka=[];var payShowAll=false;
+function togglePayAll(){payShowAll=!payShowAll;rPay(lastGenka)}
 function rPay(rows){
+  lastGenka=rows;
   var inv=allInv();
-  var byM={},order=[];
+  var now=new Date();var nowIdx=now.getFullYear()*12+now.getMonth()+1;
+  var byM={},order=[],hidden=0;
   rows.forEach(function(g){
     var ym=pYM(g.pay_date)||pYM(g.date);var k=ym?yK(ym):'日付未定';
+    if(!payShowAll&&ym&&(ym.y*12+ym.m)<nowIdx){hidden++;return}
     if(!byM[k]){byM[k]=[];order.push(k)}byM[k].push(g);
   });
   order.sort(function(a,b){var x=kY(a),y=kY(b);if(!x)return 1;if(!y)return -1;return(x.y*12+x.m)-(y.y*12+y.m)});
@@ -655,14 +668,16 @@ function rPay(rows){
     var arr=byM[k],tot=0,rowsH='';
     arr.forEach(function(g){
       var amt=Number(g.amount)||0;tot+=amt;
-      var m=inv.some(function(v){if(nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===(v.subtotal||0)});
-      rowsH+='<tr><td style="white-space:nowrap">'+E(g.pay_date||g.date||'')+'</td><td>'+E(g.supplier||'')+'</td><td>'+E(g.item||'')+'</td><td class="r">'+F(amt)+'</td><td class="c">'+(m?'<span class="tg a">\ud83d\udcc4\u3042\u308a</span>':'<span class="tg" style="background:#fef3f0;color:#c4371c">\u26a0\u672a\u53d7\u7406</span>')+'</td></tr>';
+      var m=inv.some(function(v){if(!g.supplier||nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===(v.subtotal||0)});
+      var ank=(g.anken_company||'')+(g.anken_ip?'／'+g.anken_ip:'');
+      rowsH+='<tr><td style="white-space:nowrap">'+E(g.pay_date||g.date||'')+'</td><td>'+(g.supplier?E(g.supplier):'<span style="color:#c4371c">未入力</span>')+'</td><td style="color:#8a8279;font-size:10px">'+E(ank)+'</td><td>'+E(g.item||'')+'</td><td class="r">'+F(amt)+'</td><td class="c">'+(m?'<span class="tg a">\ud83d\udcc4\u3042\u308a</span>':'<span class="tg" style="background:#fef3f0;color:#c4371c">\u26a0\u672a\u53d7\u7406</span>')+'</td></tr>';
     });
     h+='<div style="margin:14px 0 4px;font-weight:700">'+E(k)+' <span style="color:#8a8279;font-weight:400">'+arr.length+'件</span> <span style="font-family:\'JetBrains Mono\',monospace;color:#2d5a27">\u00a5'+F(tot)+'</span></div>';
-    h+='<div class="tc"><table><thead><tr><th>支払日</th><th>支払先</th><th>内容</th><th class="r">金額</th><th>請求書</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
+    h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
   });
-  if(!h)h='<div class="empty">原価データがありません</div>';
-  h='<div style="font-size:10px;color:#8a8279;margin-bottom:4px">案件管理アプリの原価一覧を読取専用で表示しています。「\ud83d\udcc4あり」= 同じ支払先・金額の請求書を受理済み</div>'+h;
+  if(!h)h='<div class="empty">'+(payShowAll?'原価データがありません':'今月以降の支払予定はありません')+'</div>';
+  var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'今月以降のみ表示':'過去分も表示('+hidden+'件)')+'</button>';
+  h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:10px;color:#8a8279">KOLが発注先へ支払う原価の予定（案件管理より・読取専用）。「\ud83d\udcc4あり」= 同じ支払先・金額の請求書を受理済み</div>'+toggle+'</div>'+h;
   document.getElementById('PM_body').innerHTML=h;
 }
 
@@ -673,17 +688,38 @@ function markSeen(n){var s=seenSet();if(s.indexOf(n)<0){s.push(n);try{localStora
 function idbOpen(){return new Promise(function(res,rej){var q=indexedDB.open('kolInvFS',1);q.onupgradeneeded=function(){q.result.createObjectStore('h')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error)}})}
 function idbSet(k,v){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=res;tx.onerror=function(){rej(tx.error)}})})}
 function idbGet(k){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readonly');var g=tx.objectStore('h').get(k);g.onsuccess=function(){res(g.result)};g.onerror=function(){rej(g.error)}})})}
+var collectPdfs=async function(dir,ctx,out){
+  // ctx = {pay:{y,m}|null, recv:{y,m}|null}
+  for await (var entry of dir.values()){
+    if(entry.kind==='directory'){
+      var nm=String(entry.name).replace(/[\s\u3000]/g,'');
+      var next={pay:ctx.pay,recv:ctx.recv};
+      if(!/まで|迄/.test(nm)){
+        var payM=nm.match(/(?:(\d{4})年?)?(\d{1,2})月末?支払/);
+        if(payM){
+          var pm=+payM[2],py=payM[1]?+payM[1]:null;
+          if(!py){py=next.recv?next.recv.y:nearYear(pm);if(next.recv&&pm<next.recv.m)py=next.recv.y+1}
+          next.pay={y:py,m:pm};
+        }else{
+          var full=pYM(nm); // YYYY年M月 / YYYY-MM など
+          var lone=nm.match(/^(\d{1,2})月$/);
+          if(full)next.recv=full;
+          else if(lone)next.recv={y:nearYear(+lone[1]),m:+lone[1]};
+        }
+      }
+      await collectPdfs(entry,next,out);
+    }else if(/\.pdf$/i.test(entry.name)){
+      out.push({e:entry,pay:ctx.pay,recv:ctx.recv});
+    }
+  }
+};
 var scanFolder=async function(h,silent){
   var found=0;
   try{
     var seen=seenSet();var known=allInv().map(function(v){return v.file});
-    var news=[];
-    for await (var entry of h.values()){
-      if(entry.kind!=='file'||!/\.pdf$/i.test(entry.name))continue;
-      if(seen.indexOf(entry.name)>=0||known.indexOf(entry.name)>=0)continue;
-      news.push(entry);
-    }
-    for(var i=0;i<news.length;i++){var f=await news[i].getFile();markSeen(news[i].name);doP(f);found++}
+    var all=[];await collectPdfs(h,{pay:null,recv:null},all);
+    var news=all.filter(function(x){return seen.indexOf(x.e.name)<0&&known.indexOf(x.e.name)<0});
+    for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv);found++}
   }catch(e){console.error('scanFolder',e)}
   if(!silent&&found===0)alert('\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f');
   return found;
@@ -699,13 +735,19 @@ var connectFolder=async function(){
     }
     var h=await window.showDirectoryPicker();
     await idbSet('dir',h);
-    // 初回接続: いまフォルダにあるPDFは既存扱いにして誤爆連発を防ぐ
-    var cnt=0;
-    for await (var entry of h.values()){
-      if(entry.kind==='file'&&/\.pdf$/i.test(entry.name)){markSeen(entry.name);cnt++}
+    var all=[];await collectPdfs(h,{pay:null,recv:null},all);
+    var known=allInv().map(function(v){return v.file});
+    var seen=seenSet();
+    var news=all.filter(function(x){return seen.indexOf(x.e.name)<0&&known.indexOf(x.e.name)<0});
+    if(news.length===0){alert('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u4eca\u5f8c\u306f\u30a2\u30d7\u30ea\u3092\u958b\u304f\u305f\u3073\u306b\u81ea\u52d5\u3067\u53d6\u8fbc\u307f\u307e\u3059');return}
+    var doNow=confirm('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\n\u672a\u53d6\u8fbc\u306ePDF\u304c'+news.length+'\u4ef6\u3042\u308a\u307e\u3059\uff08\u6708\u30d5\u30a9\u30eb\u30c0\u5185\u306e\u3082\u306e\u306f\u305d\u306e\u6708\u306b\u632f\u5206\uff09\u3002\n\u4eca\u3059\u3050\u5168\u3066\u8aad\u307f\u53d6\u308a\u307e\u3059\u304b\uff1f\n\nOK=\u5168\u3066\u8aad\u53d6\u3000\u30ad\u30e3\u30f3\u30bb\u30eb=\u4eca\u5f8c\u8ffd\u52a0\u3055\u308c\u308b\u5206\u306e\u307f');
+    if(doNow){
+      for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv)}
+    }else{
+      news.forEach(function(x){markSeen(x.e.name)});
+      alert('\u4e86\u89e3\u3067\u3059\u3002\u4eca\u5f8c\u30d5\u30a9\u30eb\u30c0\u306b\u8ffd\u52a0\u3055\u308c\u305fPDF\u304b\u3089\u81ea\u52d5\u53d6\u8fbc\u3057\u307e\u3059');
     }
-    alert('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\n\u4eca\u5f8c\u306f\u30a2\u30d7\u30ea\u3092\u958b\u304f\u305f\u3073\u306b\u65b0\u3057\u304f\u8ffd\u52a0\u3055\u308c\u305fPDF\u3092\u81ea\u52d5\u3067\u8aad\u307f\u53d6\u308a\u307e\u3059\u3002\n\uff08\u73fe\u5728\u5165\u3063\u3066\u3044\u308b'+cnt+'\u4ef6\u306f\u53d6\u8fbc\u6e08\u307f\u6271\u3044\u3067\u3059\u3002\u5fc5\u8981\u306a\u3082\u306e\u306f\u5f93\u6765\u901a\u308a\u30c9\u30e9\u30c3\u30b0\u3067\u53d6\u8fbc\u3081\u307e\u3059\uff09');
-  }catch(e){/* ユーザーがキャンセル */}
+  }catch(e){/* \u30e6\u30fc\u30b6\u30fc\u304c\u30ad\u30e3\u30f3\u30bb\u30eb */}
 };
 var autoScan=async function(){
   try{
