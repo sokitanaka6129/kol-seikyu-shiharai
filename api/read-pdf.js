@@ -3,6 +3,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ===== 簡易認証: APP_TOKEN が設定されていれば合言葉を照合 =====
+  const appToken = process.env.APP_TOKEN;
+  if (appToken) {
+    const sent = req.headers['x-app-token'] || '';
+    if (sent !== appToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'API key not configured' });

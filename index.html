@@ -237,7 +237,24 @@ function build(pool){var ms={},or=[];pool.forEach(function(v){if(!v.id)v.id=Date
 function init(){var pool=RAW.map(function(d,i){return Object.assign({},d,{id:Date.now()+i})});D=build(pool);AM=D.o[D.o.length-1]||''}
 
 // ===== STORAGE (Supabase + localStorage cache) =====
-var syncing=false;var saveTimer=null;
+var syncing=false;var saveTimer=null;var syncState='ok';// 'ok'|'sync'|'err'
+var TK='kolInvToken';
+function tok(){try{return localStorage.getItem(TK)||''}catch(e){return ''}}
+function askTok(){
+  var t=prompt('\u5408\u8a00\u8449\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\uff08\u521d\u56de\u306e\u307f\uff09');
+  if(t&&t.trim()){try{localStorage.setItem(TK,t.trim())}catch(e){}return true}
+  return false;
+}
+function apiFetch(path,opts,retried){
+  opts=opts||{};opts.headers=opts.headers||{};
+  opts.headers['x-app-token']=tok();
+  return fetch(path,opts).then(function(r){
+    if(r.status===401&&!retried){
+      if(askTok())return apiFetch(path,opts,true);
+    }
+    return r;
+  });
+}
 function sv(){
   // Save to localStorage immediately (cache)
   try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}
@@ -246,25 +263,35 @@ function sv(){
   saveTimer=setTimeout(function(){cloudSave()},500);
 }
 function cloudSave(){
-  syncing=true;updSync();
-  fetch('/api/db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:D})})
-  .then(function(r){if(!r.ok)throw new Error('Save failed');syncing=false;updSync()})
-  .catch(function(e){console.error('Cloud save error:',e);syncing=false;updSync()});
+  syncState='sync';updSync();
+  apiFetch('/api/db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:D})})
+  .then(function(r){if(!r.ok)throw new Error('Save failed: '+r.status);syncState='ok';updSync()})
+  .catch(function(e){console.error('Cloud save error:',e);syncState='err';updSync()});
 }
 function cloudLoad(cb){
-  fetch('/api/db').then(function(r){return r.json()}).then(function(res){
+  apiFetch('/api/db').then(function(r){
+    if(!r.ok)throw new Error('Load failed: '+r.status);
+    return r.json();
+  }).then(function(res){
     if(res.data&&res.data.m&&res.data.o&&res.data.o.length>0){
       D=res.data;AM=D.o[D.o.length-1]||'';
       try{localStorage.setItem(SK,JSON.stringify(D))}catch(e){}
+      syncState='ok';updSync();
       if(cb)cb(true);
-    }else{if(cb)cb(false)}
-  }).catch(function(e){console.error('Cloud load error:',e);if(cb)cb(false)});
+    }else{
+      // クラウドが空: ローカルにデータがあれば初回アップロード
+      if(D&&D.o&&D.o.length>0){cloudSave()}else{syncState='ok';updSync()}
+      if(cb)cb(false);
+    }
+  }).catch(function(e){console.error('Cloud load error:',e);syncState='err';updSync();if(cb)cb(false)});
 }
 function ld(){try{var s=localStorage.getItem(SK);if(s){var p=JSON.parse(s);if(p.m&&p.o&&p.o.length>0){D=p;AM=D.o[D.o.length-1]||'';return true}}}catch(e){}return false}
 function updSync(){
   var el=document.getElementById('syncStatus');
-  if(el)el.textContent=syncing?'\u2601 \u540c\u671f\u4e2d…':'\u2601 \u540c\u671f\u6e08';
-  if(el)el.style.color=syncing?'#c4371c':'#2d5a27';
+  if(!el)return;
+  if(syncState==='sync'){el.textContent='\u2601 \u540c\u671f\u4e2d\u2026';el.style.color='#8a8279'}
+  else if(syncState==='err'){el.textContent='\u26a0 \u540c\u671f\u30a8\u30e9\u30fc\uff08\u30ed\u30fc\u30ab\u30eb\u4fdd\u5b58\u306e\u307f\uff09';el.style.color='#c4371c'}
+  else{el.textContent='\u2601 \u540c\u671f\u6e08';el.style.color='#2d5a27'}
 }
 
 if(!ld())init();
@@ -519,7 +546,7 @@ function onPF(files){for(var i=0;i<files.length;i++)if(files[i].type==='applicat
 function doP(file){
   var el=document.createElement('div');el.className='proc';el.innerHTML='<div class="spin"></div><span>'+E(file.name)+' 読取中…</span>';document.getElementById('PR').appendChild(el);
   var rd=new FileReader();rd.onload=function(){var b=rd.result.split(',')[1];
-    fetch('/api/read-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf_base64:b})})
+    apiFetch('/api/read-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf_base64:b})})
     .then(function(r){if(!r.ok)throw new Error('API error '+r.status);return r.json()})
     .then(function(p){
       var inv=apR(p,file.name);var ym=gPM(inv);var k=yK(ym);
