@@ -163,16 +163,15 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
   </div>
 </div>
 <div class="m-modal" id="FM" onclick="if(event.target===this)closeFM()">
-  <div class="m-modal-box" style="max-width:460px;border-radius:16px;margin:auto;max-height:85vh">
-    <div class="m-modal-hd"><h3>📂 読み込む月を選択</h3><button class="btn" onclick="closeFM()">✕</button></div>
-    <div style="font-size:11px;color:#8a8279;margin-bottom:8px">チェックした月フォルダのPDFだけを読み取ります（表にある同名ファイルは除外済み）</div>
-    <div id="FM_list" style="display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow-y:auto"></div>
-    <div style="display:flex;gap:8px;margin-top:14px;justify-content:space-between;align-items:center">
-      <label style="font-size:11px;cursor:pointer"><input type="checkbox" id="FM_all" onchange="fmAll(this.checked)"> 全選択</label>
-      <div style="display:flex;gap:8px">
-        <button class="btn" onclick="closeFM()">キャンセル</button>
-        <button class="btn-p" style="padding:8px 20px;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer" onclick="startFolderImport()">選択した月を取込</button>
-      </div>
+  <div class="m-modal-box" style="max-width:560px;border-radius:16px;margin:auto">
+    <div class="m-modal-hd"><h3>📂 フォルダを指定して取込</h3><button class="btn" onclick="closeFM()">✕</button></div>
+    <div style="font-size:11px;color:#5c554a;margin-bottom:6px">読み込むフォルダのパスを入力してください。このフォルダの中のPDFだけを読み取ります。</div>
+    <input id="FM_path" style="width:100%;padding:10px;border:1px solid #ddd8cf;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none" placeholder="例: 2027年1月まで/5月">
+    <div style="font-size:10px;color:#8a8279;margin-top:6px">・接続済みフォルダからの相対パスでOK（例: 2027年1月まで/5月/6月末支払い）<br>・Finderからコピーしたフルパス（Users/…）を貼ってもOK<br>・表にある同名ファイルは自動で除外されます</div>
+    <div id="FM_msg" style="font-size:11px;color:#c4371c;margin-top:6px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button class="btn" onclick="closeFM()">キャンセル</button>
+      <button class="btn-p" style="padding:8px 20px;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer" onclick="importByPath()">このフォルダを取込</button>
     </div>
   </div>
 </div>
@@ -702,42 +701,45 @@ function rPay(rows){
   document.getElementById('PM_body').innerHTML=h;
 }
 
-// ===== フォルダ取込（Chrome/Edge・月を選んで手動取込） =====
+// ===== フォルダ取込（Chrome/Edge・パス指定で手動取込のみ） =====
 function idbOpen(){return new Promise(function(res,rej){var q=indexedDB.open('kolInvFS',1);q.onupgradeneeded=function(){q.result.createObjectStore('h')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error)}})}
 function idbSet(k,v){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=res;tx.onerror=function(){rej(tx.error)}})})}
 function idbGet(k){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readonly');var g=tx.objectStore('h').get(k);g.onsuccess=function(){res(g.result)};g.onerror=function(){rej(g.error)}})})}
+function stepCtx(nm,ctx){
+  nm=String(nm).replace(/[\s\u3000]/g,'');
+  var next={pay:ctx.pay,recv:ctx.recv,anchor:ctx.anchor};
+  if(/まで|迄/.test(nm)){
+    var anc=pYM(nm);if(anc)next.anchor=anc;
+  }else{
+    var payM=nm.match(/(?:(\d{4})年?)?(\d{1,2})月末?支払/);
+    if(payM){
+      var pm=+payM[2],py=payM[1]?+payM[1]:null;
+      if(!py){py=next.recv?next.recv.y:nearYear(pm);if(next.recv&&pm<next.recv.m)py=next.recv.y+1}
+      next.pay={y:py,m:pm};
+    }else{
+      var full=pYM(nm);
+      var lone=nm.match(/^(\d{1,2})月$/);
+      if(full)next.recv=full;
+      else if(lone){
+        var lm=+lone[1],ly;
+        if(next.anchor){ly=next.anchor.y;if(lm>next.anchor.m)ly--}
+        else{var n=new Date();ly=n.getFullYear();if(lm>n.getMonth()+1)ly--}
+        next.recv={y:ly,m:lm};
+      }
+    }
+  }
+  return next;
+}
 var collectPdfs=async function(dir,ctx,out){
   for await (var entry of dir.values()){
     if(entry.kind==='directory'){
-      var nm=String(entry.name).replace(/[\s\u3000]/g,'');
-      var next={pay:ctx.pay,recv:ctx.recv,anchor:ctx.anchor};
-      if(/まで|迄/.test(nm)){
-        var anc=pYM(nm);if(anc)next.anchor=anc;
-      }else{
-        var payM=nm.match(/(?:(\d{4})年?)?(\d{1,2})月末?支払/);
-        if(payM){
-          var pm=+payM[2],py=payM[1]?+payM[1]:null;
-          if(!py){py=next.recv?next.recv.y:nearYear(pm);if(next.recv&&pm<next.recv.m)py=next.recv.y+1}
-          next.pay={y:py,m:pm};
-        }else{
-          var full=pYM(nm);
-          var lone=nm.match(/^(\d{1,2})月$/);
-          if(full)next.recv=full;
-          else if(lone){
-            var lm=+lone[1],ly;
-            if(next.anchor){ly=next.anchor.y;if(lm>next.anchor.m)ly--}
-            else{var n=new Date();ly=n.getFullYear();if(lm>n.getMonth()+1)ly--}
-            next.recv={y:ly,m:lm};
-          }
-        }
-      }
-      await collectPdfs(entry,next,out);
+      await collectPdfs(entry,stepCtx(entry.name,ctx),out);
     }else if(/\.pdf$/i.test(entry.name)){
       out.push({e:entry,pay:ctx.pay,recv:ctx.recv});
     }
   }
 };
-var FGROUPS={};var FORDER=[];
+var ROOTH=null;
 var connectFolder=async function(){
   if(!window.showDirectoryPicker){alert('この機能はChromeまたはEdgeでのみ使えます');return}
   try{
@@ -748,41 +750,40 @@ var connectFolder=async function(){
       if(p!=='granted')h=null;
     }
     if(!h){h=await window.showDirectoryPicker();await idbSet('dir',h)}
-    var all=[];await collectPdfs(h,{pay:null,recv:null,anchor:null},all);
-    var known=allInv().map(function(v){return v.file});
-    var news=all.filter(function(x){return known.indexOf(x.e.name)<0});
-    FGROUPS={};FORDER=[];
-    news.forEach(function(x){
-      var k=x.recv?yK(x.recv):'（月フォルダ外）';
-      if(!FGROUPS[k]){FGROUPS[k]=[];FORDER.push(k)}
-      FGROUPS[k].push(x);
-    });
-    FORDER.sort(function(a,b){
-      var x=kY(a),y=kY(b);
-      if(!x&&!y)return 0;if(!x)return 1;if(!y)return -1;
-      return(y.y*12+y.m)-(x.y*12+x.m); // 新しい月が上
-    });
-    if(!FORDER.length){alert('未取込のPDFはありません（表にある同名ファイルは除外されます）');return}
-    var html='';
-    FORDER.forEach(function(k,i){
-      var tot=FGROUPS[k].length;
-      html+='<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #ddd8cf;border-radius:8px;cursor:pointer;font-size:13px">'
-        +'<input type="checkbox" class="fm-cb" data-k="'+E(k)+'">'
-        +'<span style="font-weight:600">'+E(k)+'</span>'
-        +'<span style="color:#8a8279;font-size:11px;margin-left:auto">'+tot+'件</span></label>';
-    });
-    document.getElementById('FM_list').innerHTML=html;
-    document.getElementById('FM_all').checked=false;
+    ROOTH=h;
+    var last='';try{last=localStorage.getItem('kolInvLastPath')||''}catch(e){}
+    document.getElementById('FM_path').value=last;
+    var msg=document.getElementById('FM_msg');
+    msg.textContent='接続中のフォルダ: '+h.name;msg.style.color='#2d5a27';
     document.getElementById('FM').classList.add('open');
-  }catch(e){/* ユーザーがキャンセル */}
+  }catch(e){/* キャンセル */}
 };
 function closeFM(){document.getElementById('FM').classList.remove('open')}
-function fmAll(on){document.querySelectorAll('.fm-cb').forEach(function(c){c.checked=on})}
-var startFolderImport=async function(){
-  var sel=[];document.querySelectorAll('.fm-cb').forEach(function(c){if(c.checked)sel.push(c.dataset.k)});
-  if(!sel.length){alert('取り込む月にチェックを入れてください');return}
-  var files=[];sel.forEach(function(k){(FGROUPS[k]||[]).forEach(function(x){files.push(x)})});
+var importByPath=async function(){
+  var msg=document.getElementById('FM_msg');
+  msg.style.color='#c4371c';
+  if(!ROOTH){msg.textContent='フォルダ未接続です。開き直してください';return}
+  var raw=(document.getElementById('FM_path').value||'').trim();
+  if(!raw){msg.textContent='パスを入力してください';return}
+  var segs=raw.split(/[\/\\]+/).map(function(s){return s.trim()}).filter(function(s){return s});
+  var ri=segs.lastIndexOf(ROOTH.name);
+  if(ri>=0)segs=segs.slice(ri+1);
+  var dir=ROOTH,ctx={pay:null,recv:null,anchor:null};
+  for(var i=0;i<segs.length;i++){
+    try{dir=await dir.getDirectoryHandle(segs[i])}
+    catch(e){
+      var names=[];try{for await (var en of dir.values()){if(en.kind==='directory')names.push(en.name)}}catch(e2){}
+      msg.textContent='「'+segs[i]+'」が見つかりません。この階層のフォルダ: '+(names.slice(0,10).join(' / ')||'(なし)');
+      return;
+    }
+    ctx=stepCtx(segs[i],ctx);
+  }
+  var all=[];await collectPdfs(dir,ctx,all);
+  var known=allInv().map(function(v){return v.file});
+  var files=all.filter(function(x){return known.indexOf(x.e.name)<0});
+  if(!files.length){msg.textContent='このフォルダに未取込のPDFはありません（表にある同名ファイルは除外済み）';return}
   if(!confirm(files.length+'件のPDFを読み取りますか？\n（1件ごとにAPIクレジットを少し消費します）'))return;
+  try{localStorage.setItem('kolInvLastPath',raw)}catch(e){}
   closeFM();
   for(var i=0;i<files.length;i++){
     var f=await files[i].e.getFile();
@@ -790,7 +791,7 @@ var startFolderImport=async function(){
     await new Promise(function(r){setTimeout(r,1200)});
   }
 };
-// 自動スキャンなし: 読取は📂ボタン→月選択→確認 の手動操作のみ
+// 自動スキャンなし: 読取は「フォルダボタン→パス入力→確認OK」の手動操作のみ
 
 document.addEventListener('click',function(e){if(EC&&!e.target.closest('td.ig'))cE()});
 
