@@ -675,11 +675,22 @@ dz.addEventListener('dragleave',function(){dz.classList.remove('drag')});
 dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('drag');onPF(e.dataTransfer.files)});
 
 function doCSV(){
-  var ls=cL(),gt=gT(ls);
-  var h=['No','\u53d6\u5f15\u5148\u540d','\u767a\u884c\u65e5','\u53d7\u7406','\u8acb\u6c42\u66f8\u756a\u53f7','\u4ef6\u540d','\u7a0e\u7387','\u7a0e\u629c\u91d1\u984d','\u6d88\u8cbb\u7a0e','\u6e90\u6cc9\u7a0e','\u5b9f\u8cbb','\u7a0e\u8fbc\u652f\u6255\u984d','\u652f\u6255\u671f\u9650','\u5165\u91d1\u5e0c\u671b\u65e5','\u9069\u683c\u756a\u53f7','\u9280\u884c','\u652f\u5e97','\u53e3\u5ea7\u7a2e\u5225','\u53e3\u5ea7\u756a\u53f7','\u53e3\u5ea7\u540d\u7fa9','\u540c\u4e00\u5148\u5408\u8a08','\u5099\u8003','\u5143\u30d5\u30a1\u30a4\u30eb'];
+  var all=confirm('全期間をまとめて出力しますか？\n\nOK = 全期間（全ての月タブ）\nキャンセル = 表示中の月のみ');
+  var groups=all?(VMODE==='pay'?{m:D.m,o:D.o}:invGroups()):null;
+  var rows=[];
+  if(all){for(var gi=0;gi<groups.o.length;gi++){var mk=groups.o[gi];(groups.m[mk]||[]).forEach(function(v){rows.push({t:mk,v:v})})}}
+  else{cL().forEach(function(v){rows.push({t:curTab(),v:v})})}
+  if(!rows.length){alert('出力するデータがありません');return}
+  var gtAll={};
+  if(all){var pool=rows.map(function(r){return r.v});gtAll=gT(pool)}else{gtAll=gT(cL())}
+  var h=['No','月','取引先名','発行日','請求月','受理','請求書番号','件名','税率','税抜金額','消費税','源泉税','実費','税込支払額','支払期限','入金希望日','適格番号','銀行','支店','口座種別','口座番号','口座名義','同一先合計','備考','元ファイル'];
   var csv='\uFEFF'+h.join(',')+'\n';
-  for(var i=0;i<ls.length;i++){var v=ls[i],c=cc(v);csv+=[i+1,'"'+v.name+'"',v.date,'"'+(v.recv||'')+'"',v.invNum,'"'+v.subject+'"',Math.round(v.rate*100)+'%',v.subtotal||0,c.tax,v.wh||'',v.exp||'',c.tot,v.deadline,v.payBy,v.tNum,v.bank,v.branch,v.acType,v.acNum,v.acName,gt[v.id]||'','"'+(v.note||'')+'"','"'+(v.file||'')+'"'].join(',')+'\n'}
-  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='inv_'+curTab()+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  for(var i=0;i<rows.length;i++){
+    var v=rows[i].v,c=cc(v);var im=pYM(v.date);
+    csv+=[i+1,'"'+rows[i].t+'"','"'+(v.name||'')+'"',v.date||'','"'+(im?yK(im):'')+'"','"'+(v.recv||'')+'"','"'+(v.invNum||'')+'"','"'+(v.subject||'')+'"',Math.round((v.rate||0)*100)+'%','"'+F(v.subtotal||0)+'"','"'+F(c.tax)+'"',v.wh?'"'+F(v.wh)+'"':'',v.exp?'"'+F(v.exp)+'"':'','"'+F(c.tot)+'"',v.deadline||'',v.payBy||'',v.tNum||'',v.bank||'',v.branch||'',v.acType||'',v.acNum||'','"'+(v.acName||'')+'"',gtAll[v.id]?'"'+F(gtAll[v.id])+'"':'','"'+((v.note||'').replace(/"/g,'""'))+'"','"'+((v.file||'').replace(/"/g,'""'))+'"'].join(',')+'\n';
+  }
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='inv_'+(all?'all':curTab())+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
 // ===== 支払予定（原価連携・管理者のみ / 読取専用） =====
