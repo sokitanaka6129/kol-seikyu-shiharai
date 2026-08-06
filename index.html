@@ -639,11 +639,33 @@ function sCfm(){
 }
 function okPQ(){for(var i=0;i<PDQ.length;i++){eT(PDQ[i].tab);D.m[PDQ[i].tab].push(PDQ[i].inv)}AM=PDQ[PDQ.length-1].tab;PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML='';sv();rAll()}
 function canPQ(){PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML=''}
+var findFileByName=async function(dir,name,depth){
+  if(depth>6)return null;
+  try{
+    for await (var entry of dir.values()){
+      if(entry.kind==='file'&&entry.name===name)return entry;
+      if(entry.kind==='directory'){var r=await findFileByName(entry,name,(depth||0)+1);if(r)return r}
+    }
+  }catch(e){}
+  return null;
+};
 var openPdfIdx=async function(idx){
   var v=cL()[idx];if(!v)return;
   try{
-    var blob=await idbGet('f:'+v.id);
-    if(!blob){alert('\u3053\u306e\u884c\u306ePDF\u306f\u3053\u306e\u30d6\u30e9\u30a6\u30b6\u306b\u4fdd\u5b58\u3055\u308c\u3066\u3044\u307e\u305b\u3093\uff08\u53d6\u8fbc\u3057\u305f\u7aef\u672b\u30fb\u30d6\u30e9\u30a6\u30b6\u3067\u306e\u307f\u958b\u3051\u307e\u3059\uff09');return}
+    var blob=await idbGet('f:'+v.id).catch(function(){return null});
+    if(!blob&&v.file){
+      // 保存がない場合: 接続済みフォルダから同名PDFを探す
+      var h=ROOTH||await idbGet('dir').catch(function(){return null});
+      if(h){
+        var p=await h.queryPermission({mode:'read'});
+        if(p!=='granted')p=await h.requestPermission({mode:'read'});
+        if(p==='granted'){
+          var fh=await findFileByName(h,v.file,0);
+          if(fh){blob=await fh.getFile();try{idbSet('f:'+v.id,blob)}catch(e){}}
+        }
+      }
+    }
+    if(!blob){alert('PDF\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093\u3067\u3057\u305f\u3002\n\u30fb\u63a5\u7d9a\u4e2d\u306e\u30d5\u30a9\u30eb\u30c0\u5185\u306b\u300c'+v.file+'\u300d\u304c\u3042\u308b\u304b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\n\u30fb\u307e\u305f\u306f\ud83d\udcc2\u30dc\u30bf\u30f3\u3067\u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u3066\u304b\u3089\u518d\u5ea6\u304a\u8a66\u3057\u304f\u3060\u3055\u3044');return}
     var url=URL.createObjectURL(blob);window.open(url,'_blank');
   }catch(e){alert('PDF\u3092\u958b\u3051\u307e\u305b\u3093\u3067\u3057\u305f: '+e.message)}
 };
