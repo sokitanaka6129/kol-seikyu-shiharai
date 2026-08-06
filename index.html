@@ -562,7 +562,14 @@ function doP(file,forcedPay,recvYM){
   var el=document.createElement('div');el.className='proc';el.innerHTML='<div class="spin"></div><span>'+E(file.name)+' 読取中…</span>';document.getElementById('PR').appendChild(el);
   var rd=new FileReader();rd.onload=function(){var b=rd.result.split(',')[1];
     apiFetch('/api/read-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf_base64:b})})
-    .then(function(r){if(!r.ok)throw new Error('API error '+r.status);return r.json()})
+    .then(function(r){
+      if(!r.ok)return r.json().catch(function(){return{}}).then(function(j){
+        var msg=j&&j.error?String(j.error):'';
+        if(/credit balance/i.test(msg))msg='Anthropic\u306e\u30af\u30ec\u30b8\u30c3\u30c8\u6b8b\u9ad8\u4e0d\u8db3\u3067\u3059\u3002console.anthropic.com\u3067\u30c1\u30e3\u30fc\u30b8\u3057\u3066\u304f\u3060\u3055\u3044';
+        throw new Error('API error '+r.status+(msg?': '+msg.slice(0,160):''));
+      });
+      return r.json();
+    })
     .then(function(p){
       var inv=apR(p,file.name);
       inv.recv=recvYM?yK(recvYM):todayStr();
@@ -688,30 +695,45 @@ function markSeen(n){var s=seenSet();if(s.indexOf(n)<0){s.push(n);try{localStora
 function idbOpen(){return new Promise(function(res,rej){var q=indexedDB.open('kolInvFS',1);q.onupgradeneeded=function(){q.result.createObjectStore('h')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error)}})}
 function idbSet(k,v){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=res;tx.onerror=function(){rej(tx.error)}})})}
 function idbGet(k){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readonly');var g=tx.objectStore('h').get(k);g.onsuccess=function(){res(g.result)};g.onerror=function(){rej(g.error)}})})}
-var fromY=2026; // この年より前の月フォルダは取込対象外
-function inScope(x){var ym=x.pay||x.recv;return !ym||ym.y>=fromY}
+var CUT={y:2026,m:5}; // この月より前の受理フォルダは取込対象外（一括取込時に変更可）
+function cutIdx(){return CUT.y*12+CUT.m}
+function inScope(x){var ym=x.recv||x.pay||x.anchor;return !ym||(ym.y*12+ym.m)>=cutIdx()}
+function askCut(){
+  var d=prompt('何月以降の請求書を取り込みますか？（例: 2026年7月）',yK(CUT));
+  if(d===null)return false;
+  var ym=kY(d.replace(/[\s　]/g,''))||pYM(d);
+  if(ym)CUT=ym;
+  return true;
+}
 var collectPdfs=async function(dir,ctx,out){
-  // ctx = {pay:{y,m}|null, recv:{y,m}|null}
+  // ctx = {pay, recv, anchor}  anchor=「YYYY年M月まで」フォルダの年月
   for await (var entry of dir.values()){
     if(entry.kind==='directory'){
       var nm=String(entry.name).replace(/[\s\u3000]/g,'');
-      var next={pay:ctx.pay,recv:ctx.recv};
-      if(!/まで|迄/.test(nm)){
+      var next={pay:ctx.pay,recv:ctx.recv,anchor:ctx.anchor};
+      if(/まで|迄/.test(nm)){
+        var anc=pYM(nm);if(anc)next.anchor=anc;
+      }else{
         var payM=nm.match(/(?:(\d{4})年?)?(\d{1,2})月末?支払/);
         if(payM){
           var pm=+payM[2],py=payM[1]?+payM[1]:null;
           if(!py){py=next.recv?next.recv.y:nearYear(pm);if(next.recv&&pm<next.recv.m)py=next.recv.y+1}
           next.pay={y:py,m:pm};
         }else{
-          var full=pYM(nm); // YYYY年M月 / YYYY-MM など
+          var full=pYM(nm);
           var lone=nm.match(/^(\d{1,2})月$/);
           if(full)next.recv=full;
-          else if(lone)next.recv={y:nearYear(+lone[1]),m:+lone[1]};
+          else if(lone){
+            var lm=+lone[1],ly;
+            if(next.anchor){ly=next.anchor.y;if(lm>next.anchor.m)ly--}
+            else{var n=new Date();ly=n.getFullYear();if(lm>n.getMonth()+1)ly--}
+            next.recv={y:ly,m:lm};
+          }
         }
       }
       await collectPdfs(entry,next,out);
     }else if(/\.pdf$/i.test(entry.name)){
-      out.push({e:entry,pay:ctx.pay,recv:ctx.recv});
+      out.push({e:entry,pay:ctx.pay,recv:ctx.recv,anchor:ctx.anchor});
     }
   }
 };
@@ -719,13 +741,15 @@ var scanFolder=async function(h,silent,noRetry){
   var found=0;
   try{
     var seen=seenSet();var known=allInv().map(function(v){return v.file});
-    var all=[];await collectPdfs(h,{pay:null,recv:null},all);
+    var all=[];await collectPdfs(h,{pay:null,recv:null,anchor:null},all);
     var news=all.filter(function(x){return inScope(x)&&seen.indexOf(x.e.name)<0&&known.indexOf(x.e.name)<0});
-    for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv);found++}
+    if(news.length>0&&!confirm(news.length+'件の新しいPDFを読み取りますか？\n（1件ごとにAPIクレジットを少し消費します）'))return 0;
+    for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv);found++;await new Promise(function(r){setTimeout(r,1200)})}
   }catch(e){console.error('scanFolder',e)}
   if(!silent&&found===0&&!noRetry){
-    var rescan=confirm('\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f\u3002\n\n\u53d6\u8fbc\u6e08\u307f\u306e\u8a18\u9332\u3092\u30ea\u30bb\u30c3\u30c8\u3057\u3066\u3001\u30d5\u30a9\u30eb\u30c0\u5185\u306e\u5168PDF\uff082026\u5e74\u4ee5\u964d\uff09\u3092\u8aad\u307f\u76f4\u3057\u307e\u3059\u304b\uff1f\n\uff08\u3059\u3067\u306b\u8868\u306b\u3042\u308b\u540c\u540d\u30d5\u30a1\u30a4\u30eb\u306f\u91cd\u8907\u3057\u307e\u305b\u3093\uff09');
+    var rescan=confirm('\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3067\u3057\u305f\u3002\n\n\u53d6\u8fbc\u6e08\u307f\u306e\u8a18\u9332\u3092\u30ea\u30bb\u30c3\u30c8\u3057\u3066\u3001\u30d5\u30a9\u30eb\u30c0\u5185\u306ePDF\u3092\u8aad\u307f\u76f4\u3057\u307e\u3059\u304b\uff1f\n\uff08\u6b21\u306e\u753b\u9762\u3067\u300c\u4f55\u6708\u4ee5\u964d\u3092\u53d6\u308a\u8fbc\u3080\u304b\u300d\u3092\u6307\u5b9a\u3067\u304d\u307e\u3059\u3002\u8868\u306b\u3042\u308b\u540c\u540d\u30d5\u30a1\u30a4\u30eb\u306f\u91cd\u8907\u3057\u307e\u305b\u3093\uff09');
     if(rescan){
+      if(!askCut())return found;
       try{localStorage.removeItem(FSK)}catch(e){}
       return scanFolder(h,false,true);
     }
@@ -744,14 +768,16 @@ var connectFolder=async function(){
     }
     var h=await window.showDirectoryPicker();
     await idbSet('dir',h);
-    var all=[];await collectPdfs(h,{pay:null,recv:null},all);
+    var all=[];await collectPdfs(h,{pay:null,recv:null,anchor:null},all);
     var known=allInv().map(function(v){return v.file});
     var seen=seenSet();
     var news=all.filter(function(x){return inScope(x)&&seen.indexOf(x.e.name)<0&&known.indexOf(x.e.name)<0});
     if(news.length===0){alert('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\u65b0\u3057\u3044PDF\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u4eca\u5f8c\u306f\u30a2\u30d7\u30ea\u3092\u958b\u304f\u305f\u3073\u306b\u81ea\u52d5\u3067\u53d6\u8fbc\u307f\u307e\u3059');return}
     var doNow=confirm('\ud83d\udcc2 \u30d5\u30a9\u30eb\u30c0\u3092\u63a5\u7d9a\u3057\u307e\u3057\u305f\uff01\n\u672a\u53d6\u8fbc\u306ePDF\u304c'+news.length+'\u4ef6\u3042\u308a\u307e\u3059\uff08\u6708\u30d5\u30a9\u30eb\u30c0\u5185\u306e\u3082\u306e\u306f\u305d\u306e\u6708\u306b\u632f\u5206\uff09\u3002\n\u4eca\u3059\u3050\u5168\u3066\u8aad\u307f\u53d6\u308a\u307e\u3059\u304b\uff1f\n\nOK=\u5168\u3066\u8aad\u53d6\u3000\u30ad\u30e3\u30f3\u30bb\u30eb=\u4eca\u5f8c\u8ffd\u52a0\u3055\u308c\u308b\u5206\u306e\u307f');
     if(doNow){
-      for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv)}
+      if(!askCut())return;
+      news=news.filter(inScope);
+      for(var i=0;i<news.length;i++){var f=await news[i].e.getFile();markSeen(news[i].e.name);doP(f,news[i].pay,news[i].recv);await new Promise(function(r){setTimeout(r,1200)})}
     }else{
       news.forEach(function(x){markSeen(x.e.name)});
       alert('\u4e86\u89e3\u3067\u3059\u3002\u4eca\u5f8c\u30d5\u30a9\u30eb\u30c0\u306b\u8ffd\u52a0\u3055\u308c\u305fPDF\u304b\u3089\u81ea\u52d5\u53d6\u8fbc\u3057\u307e\u3059');
@@ -773,7 +799,7 @@ var autoScan=async function(){
     }
   }catch(e){console.log('autoScan',e)}
 };
-verifyAdmin(function(ok){if(ok)autoScan()});
+// auto-scan disabled: folder is read ONLY when the folder button is pressed (to save API credits)
 
 document.addEventListener('click',function(e){if(EC&&!e.target.closest('td.ig'))cE()});
 
