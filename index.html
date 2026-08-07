@@ -228,7 +228,7 @@ function kY(k){var x=k.match(/(\d{4})\u5e74(\d{1,2})\u6708/);return x?{y:+x[1],m
 function gPM(v){var d=pYM(v.deadline);if(d)return d;var p=pYM(v.payBy);if(p)return p;var t=pYM(v.date);if(t)return aM(t,2);var n=new Date();return{y:n.getFullYear(),m:n.getMonth()+1}}
 function srt(){D.o.sort(function(a,b){var x=kY(a),y=kY(b);return(x.y*12+x.m)-(y.y*12+y.m)})}
 function eT(k){if(!D.m[k]){D.m[k]=[];D.o.push(k);srt()}}
-function cc(v){var t=Math.round((v.subtotal||0)*(v.rate||0));return{tax:t,tot:(v.subtotal||0)+t-(v.wh||0)+(v.exp||0)}}
+function cc(v){var s=Number(v.subtotal)||0,r=Number(v.rate)||0,w=Number(v.wh)||0,x=Number(v.exp)||0;var t=Math.round(s*r);return{tax:t,tot:s+t-w+x}}
 function eom(ym){var d=new Date(ym.y,ym.m,0);return ym.y+'/'+('0'+ym.m).slice(-2)+'/'+('0'+d.getDate()).slice(-2)}
 function autoDL(v){if(!v.deadline&&!v.payBy){var t=pYM(v.date);if(t)v.deadline=eom(aM(t,2))}}
 function invMonthsAgo(v){var t=pYM(v.date);if(!t)return 0;var n=new Date();return(n.getFullYear()*12+n.getMonth()+1)-(t.y*12+t.m)}
@@ -392,8 +392,8 @@ function rT(){
     html+='<td class="c" style="color:#8a8279;font-size:9px">'+(idx+1)+'</td>';
     for(var j=0;j<CL.length;j++){var col=CL[j];
       if(col.k==='_invM'){var im=pYM(v.date);html+='<td class="c" style="color:#5c554a;white-space:nowrap;font-size:10px">'+(im?yK(im):'')+'</td>'}
-      else if(col.k==='_tax')html+='<td class="r" style="color:#8a8279">'+F(c.tax)+'</td>';
-      else if(col.k==='_tot')html+='<td class="r" style="font-weight:600">'+F(c.tot)+'</td>';
+      else if(col.k==='_tax')html+='<td class="r ctax" data-ci="'+idx+'" style="color:#8a8279">'+F(c.tax)+'</td>';
+      else if(col.k==='_tot')html+='<td class="r ctot" data-ci="'+idx+'" style="font-weight:600">'+F(c.tot)+'</td>';
       else if(col.k==='_grp')html+='<td class="r">'+(gv?'<span class="grp">'+F(gv)+'</span>':'')+'</td>';
       else if(col.k==='rate'){var rv=v.rate;var tg=rv===.10?'<span class="tg a">10%</span>':'<span class="tg b">8%</span>';html+='<td class="c ed" data-i="'+idx+'" data-k="rate" onclick="sE(this)">'+tg+'</td>'}
       else if(col.k==='note'){var tx=(v.note||'').replace(/\u26a0\s*/g,'');html+='<td class="ed" data-i="'+idx+'" data-k="note" onclick="sE(this)">'+(wr?'<span class="wi">\u26a0</span> ':'')+'<span class="nt">'+E(tx)+'</span></td>'}
@@ -485,16 +485,28 @@ function sE(td){
   if(td.classList.contains('ig'))return;cE();
   var idx=+td.dataset.i,key=td.dataset.k,col;for(var i=0;i<CL.length;i++)if(CL[i].k===key){col=CL[i];break}
   var v=cL()[idx],val=v[key];td.classList.add('ig');EC={td:td,i:idx,k:key};
-  if(col.t==='s'){var h='<select onchange="cE()" onblur="cE()">';var ops=col.op||[];for(var i=0;i<ops.length;i++)h+='<option value="'+ops[i][0]+'"'+(String(val)===ops[i][0]||String(val)===String(parseFloat(ops[i][0]))?' selected':'')+'>'+ops[i][1]+'</option>';td.innerHTML=h+'</select>';td.querySelector('select').focus()}
-  else if(col.t==='n'){td.innerHTML='<input type="number" value="'+(val||'')+'" onblur="cE()" onkeydown="ek(event)">';td.querySelector('input').focus()}
+  if(col.t==='s'){var h='<select onchange="lv();cE()" onblur="cE()">';var ops=col.op||[];for(var i=0;i<ops.length;i++)h+='<option value="'+ops[i][0]+'"'+(String(val)===ops[i][0]||String(val)===String(parseFloat(ops[i][0]))?' selected':'')+'>'+ops[i][1]+'</option>';td.innerHTML=h+'</select>';td.querySelector('select').focus()}
+  else if(col.t==='n'){td.innerHTML='<input type="number" value="'+(val||'')+'" oninput="lv()" onblur="cE()" onkeydown="ek(event)">';td.querySelector('input').focus()}
   else{var dv=val||'';if(key==='name')dv=v.name||'';td.innerHTML='<input type="text" value="'+E(String(dv))+'" onblur="cE()" onkeydown="ek(event)">';td.querySelector('input').focus()}
+}
+function lv(){
+  if(!EC)return;var idx=EC.i,key=EC.k;
+  if(key!=='rate'&&key!=='subtotal'&&key!=='wh'&&key!=='exp')return;
+  var inp=EC.td.querySelector('input,select');if(!inp)return;
+  var v=cL()[idx];if(!v)return;
+  var tmp={};for(var k2 in v)tmp[k2]=v[k2];
+  var val=inp.value;
+  tmp[key]=(key==='rate')?parseFloat(val):(val===''?null:parseInt(val));
+  var c=cc(tmp);
+  var t1=document.querySelector('td.ctax[data-ci="'+idx+'"]');if(t1)t1.textContent=F(c.tax);
+  var t2=document.querySelector('td.ctot[data-ci="'+idx+'"]');if(t2)t2.textContent=F(c.tot);
 }
 function ek(e){if(e.key==='Enter')cE();if(e.key==='Escape'){EC=null;rAll()};if(e.key==='Tab'){e.preventDefault();cE()}}
 function cE(){
   if(!EC)return;var td=EC.td,idx=EC.i,key=EC.k,col;
   for(var i=0;i<CL.length;i++)if(CL[i].k===key){col=CL[i];break}
   var inp=td.querySelector('input,select');if(!inp){EC=null;return}
-  var val=inp.value;if(col.t==='n')val=val?parseInt(val):null;else if(col.t==='s'&&key==='rate')val=parseFloat(val);
+  var val=inp.value;if(col.t==='n')val=(val===''?null:parseInt(val));else if(col.t==='s'&&key==='rate')val=parseFloat(val);
   EC=null;cL()[idx][key]=val;sv();rAll();
 }
 
