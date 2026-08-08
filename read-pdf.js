@@ -24,6 +24,7 @@ export default async function handler(req, res) {
     }
 
     const prompt = `この請求書PDFから以下をJSON形式のみで返してください。JSON以外は不要。
+重要: "name"（取引先名）は請求書の発行元（差出人・支払先）の名前です。宛先である「KOL株式会社」「株式会社KOL」は宛名なので絶対にnameに入れないこと。
 {"name":"取引先名","date":"YYYY/MM/DD","invNum":"請求書番号","subject":"件名","subtotal":税抜金額数値,"tax_rate":税率数値,"withholding":源泉税数値orNull,"expenses":実費数値orNull,"expenses_taxed":実費に消費税がかかっているかbool,"deadline":"支払期限YYYY/MM/DDorEmpty","payBy":"入金希望日YYYY/MM/DDorEmpty","tNum":"適格番号orEmpty","bank":"銀行","branch":"支店","acType":"口座種別","acNum":"口座番号","acName":"口座名義","is_corp":法人かbool,"notes":"特記事項"}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
