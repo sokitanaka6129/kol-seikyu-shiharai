@@ -105,7 +105,7 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
 <div class="hd">
   <div style="display:flex;align-items:center;gap:8px"><div class="logo">請求書管理<span>KOL株式会社</span></div><span id="syncStatus" style="font-size:10px;color:#2d5a27">☁ 同期済</span></div>
   <div class="hbtns">
-    <button class="btn" id="payBtn" style="display:none" onclick="openPay()">💰支払予定</button><button class="btn" id="fldBtn" style="display:none" onclick="connectFolder()">📂フォルダ</button><button class="btn" id="admBtn" title="管理者" onclick="adminLogin()">⚙</button><button class="btn" onclick="doCSV()">📥CSV</button>
+    <button class="btn" id="payBtn" style="display:none" onclick="openPay()">💰支払予定</button><button class="btn" id="fldBtn" style="display:none" onclick="connectFolder()">📂フォルダ</button><button class="btn" id="admBtn" title="管理者" onclick="adminLogin()">⚙</button><button class="btn" onclick="openRec()">🔁定期</button><button class="btn" onclick="doCSV()">📥CSV</button>
     <button class="btn" onclick="openImp()">📋インポート</button>
     <button class="btn" onclick="addRow()">＋行追加</button>
     <button class="btn" onclick="reGrp()">🔄振分</button>
@@ -175,6 +175,23 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
     </div>
   </div>
 </div>
+<div class="m-modal" id="RM" onclick="if(event.target===this)closeRec()">
+  <div class="m-modal-box" style="max-width:860px;border-radius:16px;margin:auto;max-height:88vh">
+    <div class="m-modal-hd"><h3>🔁 定期支払（請求書なしの支払先リスト）</h3><button class="btn" onclick="closeRec()">✕</button></div>
+    <div style="font-size:10px;color:#8a8279;margin-bottom:8px">消費税・源泉なしで、入力した金額がそのまま支払額になります。編集はその場で自動保存。<br><b>毎月、月が替わるとこのリスト全員が当月タブへ自動追加されます</b>（同じ月には1回だけ）。別の月に入れたい場合は下の「反映」ボタンを使ってください。</div>
+    <div id="RM_list" style="overflow-x:auto"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn" onclick="recAdd()">＋行追加</button>
+      <button class="btn" onclick="recCsvToggle()">📋 CSV貼付で追加</button>
+      <button class="btn-p" style="padding:6px 16px;border:none;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer;margin-left:auto" onclick="recApply()">選択した月のタブへ反映</button>
+    </div>
+    <div id="RM_csv" style="display:none;margin-top:10px">
+      <div style="font-size:10px;color:#8a8279;margin-bottom:4px">1行1件で貼付：支払先,銀行,支店,種別,口座番号,口座名義,金額,メモ（ヘッダー行はあってもなくてもOK）</div>
+      <textarea id="RM_csvText" style="width:100%;min-height:100px;padding:8px;border:1px solid #ddd8cf;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:11px;outline:none" placeholder="中森義雄,新生銀行,本店,普通,1142055,ﾅｶﾓﾘﾖｼｵ,188000,"></textarea>
+      <div style="text-align:right;margin-top:6px"><button class="btn-p" style="padding:6px 16px;border:none;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer" onclick="recCsvImport()">取込</button></div>
+    </div>
+  </div>
+</div>
 <div class="bar">
   <div class="sbox"><span style="color:#8a8279">🔍</span><input placeholder="検索…" id="Q" oninput="rT()"></div>
   <div class="pills"><button class="pill on" onclick="sf('all',this)">すべて</button><button class="pill" onclick="sf('warn',this)">⚠要確認</button><button class="pill" onclick="sf('group',this)">同一先</button></div>
@@ -190,7 +207,7 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
       <div class="m-fi-row"><div class="m-fi"><label>発行日</label><input id="mm_date" placeholder="2026/03/01"></div><div class="m-fi"><label>請求書番号</label><input id="mm_invNum"></div></div>
       <div class="m-fi"><label>受理（月 or 日付）</label><input id="mm_recv" placeholder="2026年7月 / 2026/07/15"></div>
       <div class="m-fi"><label>件名/内容</label><input id="mm_subject"></div>
-      <div class="m-fi-row"><div class="m-fi"><label>税率</label><select id="mm_rate" onchange="mCalc()"><option value="0.10">10%</option><option value="0.08">8%</option></select></div><div class="m-fi"><label>税抜金額</label><input type="number" id="mm_subtotal" oninput="mCalc()"></div></div>
+      <div class="m-fi-row"><div class="m-fi"><label>税率</label><select id="mm_rate" onchange="mCalc()"><option value="0.10">10%</option><option value="0.08">8%</option><option value="0">0%</option></select></div><div class="m-fi"><label>税抜金額</label><input type="number" id="mm_subtotal" oninput="mCalc()"></div></div>
       <div class="m-fi-row"><div class="m-fi"><label>源泉税</label><input type="number" id="mm_wh" oninput="mCalc()"></div><div class="m-fi"><label>実費/経費</label><input type="number" id="mm_exp" oninput="mCalc()"></div></div>
       <div class="m-calc"><div class="m-calc-item"><div class="lb">消費税</div><div class="vl" id="mm_ptax">-</div></div><div class="m-calc-item"><div class="lb">税込支払額</div><div class="vl" id="mm_ptot" style="color:#2d5a27">-</div></div></div>
       <div class="m-fi-row"><div class="m-fi"><label>支払期限</label><input id="mm_deadline" placeholder="2026/03/31"></div><div class="m-fi"><label>入金希望日</label><input id="mm_payBy"></div></div>
@@ -214,7 +231,7 @@ var VMODE='pay';var AMI='';
 
 var CL=[
   {k:'name',l:'取引先',w:120,t:'t'},{k:'date',l:'発行日',w:80,t:'t'},{k:'_invM',l:'請求月',w:64,t:'x'},{k:'recv',l:'受理',w:76,t:'t'},{k:'invNum',l:'請求書No',w:88,t:'t'},{k:'subject',l:'件名',w:140,t:'t'},
-  {k:'rate',l:'税率',w:44,t:'s',op:[['0.10','10%'],['0.08','8%']]},{k:'subtotal',l:'税抜金額',w:80,t:'n'},{k:'_tax',l:'消費税',w:66,t:'x'},
+  {k:'rate',l:'税率',w:44,t:'s',op:[['0.10','10%'],['0.08','8%'],['0','0%']]},{k:'subtotal',l:'税抜金額',w:80,t:'n'},{k:'_tax',l:'消費税',w:66,t:'x'},
   {k:'wh',l:'源泉税',w:66,t:'n'},{k:'exp',l:'実費',w:60,t:'n'},{k:'_tot',l:'税込支払額',w:85,t:'x'},{k:'_grp',l:'同一先',w:70,t:'x'},
   {k:'deadline',l:'支払期限',w:80,t:'t'},{k:'payBy',l:'入金希望',w:80,t:'t'},{k:'tNum',l:'適格番号',w:100,t:'t'},
   {k:'bank',l:'銀行',w:88,t:'t'},{k:'branch',l:'支店',w:78,t:'t'},{k:'acType',l:'種別',w:44,t:'s',op:[['普通','普通'],['当座','当座']]},
@@ -326,7 +343,7 @@ function updSync(){
 if(!ld())init();
 rAll();
 // Try loading from cloud (overwrites local if newer data exists)
-cloudLoad(function(ok){if(ok)rAll()});
+cloudLoad(function(ok){if(ok)rAll();autoRec()});
 
 function rAll(){try{rTabs();rSum();rT();rMC()}catch(e){console.error(e);document.getElementById('TB').innerHTML='<tr><td>Error: '+e.message+'</td></tr>'}}
 
@@ -395,7 +412,7 @@ function rT(){
       else if(col.k==='_tax')html+='<td class="r ctax" data-ci="'+idx+'" style="color:#8a8279">'+F(c.tax)+'</td>';
       else if(col.k==='_tot')html+='<td class="r ctot" data-ci="'+idx+'" style="font-weight:600">'+F(c.tot)+'</td>';
       else if(col.k==='_grp')html+='<td class="r">'+(gv?'<span class="grp">'+F(gv)+'</span>':'')+'</td>';
-      else if(col.k==='rate'){var rv=v.rate;var tg=rv===.10?'<span class="tg a">10%</span>':'<span class="tg b">8%</span>';html+='<td class="c ed" data-i="'+idx+'" data-k="rate" onclick="sE(this)">'+tg+'</td>'}
+      else if(col.k==='rate'){var rv=Number(v.rate)||0;var tg=rv===.10?'<span class="tg a">10%</span>':(rv===.08?'<span class="tg b">8%</span>':'<span class="tg" style="background:#ece8e1;color:#5c554a">0%</span>');html+='<td class="c ed" data-i="'+idx+'" data-k="rate" onclick="sE(this)">'+tg+'</td>'}
       else if(col.k==='note'){var tx=(v.note||'').replace(/\u26a0\s*/g,'');html+='<td class="ed" data-i="'+idx+'" data-k="note" onclick="sE(this)">'+(wr?'<span class="wi">\u26a0</span> ':'')+'<span class="nt">'+E(tx)+'</span></td>'}
       else if(col.t==='n'){html+='<td class="r ed" data-i="'+idx+'" data-k="'+col.k+'" onclick="sE(this)">'+(v[col.k]?F(v[col.k]):'')+'</td>'}
       else if(col.t==='s'){html+='<td class="c ed" data-i="'+idx+'" data-k="'+col.k+'" onclick="sE(this)">'+(v[col.k]||'')+'</td>'}
@@ -426,7 +443,7 @@ function rMC(){
     h+='<div class="m-card-hd"><div class="m-card-name">'+E(v.name)+'</div><div class="m-card-total">\u00a5'+F(c.tot)+'</div></div>';
     h+='<div class="m-card-sub">'+E(v.subject||'')+(v.date?' \u30fb '+v.date:'')+'</div>';
     h+='<dl class="m-card-grid">';
-    h+='<dt>\u7a0e\u7387</dt><dd>'+(v.rate===.10?'<span class="tg a">10%</span>':'<span class="tg b">8%</span>')+'</dd>';
+    h+='<dt>\u7a0e\u7387</dt><dd>'+(Number(v.rate)===.10?'<span class="tg a">10%</span>':(Number(v.rate)===.08?'<span class="tg b">8%</span>':'<span class="tg">0%</span>'))+'</dd>';
     var imm=pYM(v.date);if(imm)h+='<dt>\u8acb\u6c42\u6708</dt><dd>'+yK(imm)+'</dd>';
     if(v.recv)h+='<dt>\u53d7\u7406</dt><dd>'+E(v.recv)+'</dd>';
     h+='<dt>\u7a0e\u629c</dt><dd>'+F(v.subtotal)+'</dd>';
@@ -869,6 +886,97 @@ var importByPath=async function(){
   }
 };
 // 自動スキャンなし: 読取は「フォルダボタン→パス入力→確認OK」の手動操作のみ
+
+
+// ===== 定期支払（請求書なしの支払リスト） =====
+function recList(){
+  if(!D.r){
+    D.r=[{id:Date.now(),name:'中森義雄',bank:'新生銀行',branch:'本店',acType:'普通',acNum:'1142055',acName:'ﾅｶﾓﾘﾖｼｵ',amt:188000,memo:''}];
+  }
+  return D.r;
+}
+function openRec(){recList();renderRec();document.getElementById('RM').classList.add('open')}
+function closeRec(){document.getElementById('RM').classList.remove('open')}
+function renderRec(){
+  var ls=recList();var tot=0;
+  var h='<table><thead><tr><th>支払先</th><th>銀行</th><th>支店</th><th>種別</th><th>口座番号</th><th>口座名義</th><th class="r">金額(入金額)</th><th>メモ</th><th></th></tr></thead><tbody>';
+  for(var i=0;i<ls.length;i++){var r=ls[i];tot+=Number(r.amt)||0;
+    function inp(k,w,type){return '<input style="width:'+w+'px;padding:4px;border:1px solid #ddd8cf;border-radius:4px;font-family:inherit;font-size:11px'+(type==='number'?';text-align:right;font-family:\'JetBrains Mono\',monospace':'')+'" type="'+(type||'text')+'" value="'+E(String(r[k]==null?'':r[k]))+'" onchange="recEdit('+i+',\''+k+'\',this.value)">'}
+    h+='<tr><td>'+inp('name',110)+'</td><td>'+inp('bank',90)+'</td><td>'+inp('branch',70)+'</td>'
+      +'<td><select style="padding:4px;border:1px solid #ddd8cf;border-radius:4px;font-family:inherit;font-size:11px" onchange="recEdit('+i+',\'acType\',this.value)"><option'+(r.acType==='普通'?' selected':'')+'>普通</option><option'+(r.acType==='当座'?' selected':'')+'>当座</option></select></td>'
+      +'<td>'+inp('acNum',70)+'</td><td>'+inp('acName',110)+'</td><td class="r">'+inp('amt',85,'number')+'</td><td>'+inp('memo',110)+'</td>'
+      +'<td><button class="btn-d" onclick="recDel('+i+')">✕</button></td></tr>';
+  }
+  h+='<tr class="trow"><td colspan="6"><b>合計</b></td><td class="r" style="font-family:\'JetBrains Mono\',monospace;font-weight:700">'+F(tot)+'</td><td colspan="2">'+ls.length+'件</td></tr>';
+  h+='</tbody></table>';
+  document.getElementById('RM_list').innerHTML=h;
+}
+function recEdit(i,k,val){
+  var ls=recList();if(!ls[i])return;
+  ls[i][k]=(k==='amt')?(val===''?null:parseInt(String(val).replace(/[,\s]/g,''))):val;
+  sv();renderRec();
+}
+function recAdd(){recList().push({id:Date.now()+Math.random(),name:'',bank:'',branch:'',acType:'普通',acNum:'',acName:'',amt:null,memo:''});sv();renderRec()}
+function recDel(i){var ls=recList();if(!ls[i])return;if(!confirm((ls[i].name||'この行')+'を削除?'))return;ls.splice(i,1);sv();renderRec()}
+function recCsvToggle(){var el=document.getElementById('RM_csv');el.style.display=el.style.display==='none'?'block':'none'}
+function recCsvImport(){
+  var txt=(document.getElementById('RM_csvText').value||'').trim();
+  if(!txt){alert('CSVを貼り付けてください');return}
+  var lines=txt.replace(/^\uFEFF/,'').split(/\r?\n/).filter(function(l){return l.trim()});
+  var count=0;
+  for(var i=0;i<lines.length;i++){
+    var c=csvSplit(lines[i]).map(function(s){return s.trim()});
+    if(!c[0]||c[0]==='支払先'||c[0]==='No')continue; // ヘッダー行はスキップ
+    var amt=parseInt(String(c[6]||'').replace(/[,\s¥\\]/g,''));
+    recList().push({id:Date.now()+Math.random()+i,name:c[0],bank:c[1]||'',branch:c[2]||'',acType:c[3]||'普通',acNum:c[4]||'',acName:c[5]||'',amt:isNaN(amt)?null:amt,memo:c[7]||''});
+    count++;
+  }
+  document.getElementById('RM_csvText').value='';
+  sv();renderRec();
+  alert(count+'件を追加しました');
+}
+// 月が替わったら定期支払を当月タブへ自動追加（月ごとに1回だけ）
+function recRow(r,ym){
+  return {id:Date.now()+Math.random(),name:r.name,date:'',invNum:'',subject:r.memo||'定期支払',rate:0,subtotal:Number(r.amt),wh:null,exp:null,deadline:eom(ym),payBy:'',tNum:'',bank:r.bank||'',branch:r.branch||'',acType:r.acType||'普通',acNum:r.acNum||'',acName:r.acName||'',note:'定期支払',file:''};
+}
+function autoRec(){
+  try{
+    var ls=(D.r||[]).filter(function(r){return r.name&&r.amt});
+    if(!ls.length)return;
+    var n=new Date();var ym={y:n.getFullYear(),m:n.getMonth()+1};var k=yK(ym);
+    if(!D.ra)D.ra={};
+    if(D.ra[k])return; // この月は適用済み
+    eT(k);var added=0;
+    ls.forEach(function(r){
+      var dup=(D.m[k]||[]).some(function(v){return v.name===r.name&&Number(v.subtotal)===Number(r.amt)&&(v.note||'').indexOf('定期支払')>=0});
+      if(dup)return;
+      D.m[k].push(recRow(r,ym));added++;
+    });
+    D.ra[k]=true;
+    sv();rAll();
+    if(added)console.log('定期支払を'+k+'に'+added+'件自動追加');
+  }catch(e){console.error('autoRec',e)}
+}
+function recApply(){
+  var ls=recList().filter(function(r){return r.name&&r.amt});
+  if(!ls.length){alert('反映できる行がありません（支払先と金額が必要）');return}
+  var n=new Date();var def=yK({y:n.getFullYear(),m:n.getMonth()+1});
+  var input=prompt('どの月のタブに追加しますか？（例: '+def+'）',AM||def);
+  if(!input)return;
+  var ym=kY(input.replace(/[\s\u3000]/g,''));
+  if(!ym){alert('YYYY年M月 の形式で入力してください');return}
+  var k=yK(ym);eT(k);
+  var added=0,skipped=0;
+  ls.forEach(function(r){
+    var dup=(D.m[k]||[]).some(function(v){return v.name===r.name&&Number(v.subtotal)===Number(r.amt)&&(v.note||'').indexOf('定期支払')>=0});
+    if(dup){skipped++;return}
+    D.m[k].push(recRow(r,ym));
+    added++;
+  });
+  if(VMODE==='pay')AM=k;
+  sv();rAll();closeRec();
+  alert(k+'に'+added+'件を追加しました'+(skipped?('（重複'+skipped+'件はスキップ）'):''));
+}
 
 document.addEventListener('click',function(e){if(EC&&!e.target.closest('td.ig'))cE()});
 
