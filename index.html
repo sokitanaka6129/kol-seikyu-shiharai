@@ -192,6 +192,14 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
     </div>
   </div>
 </div>
+<div class="m-modal" id="LM" onclick="if(event.target===this)closeLM()" style="z-index:250">
+  <div class="m-modal-box" style="max-width:560px;border-radius:16px;margin:auto;max-height:80vh">
+    <div class="m-modal-hd"><h3>🔗 請求書と紐づけ</h3><button class="btn" onclick="closeLM()">✕</button></div>
+    <div id="LM_info" style="font-size:11px;color:#5c554a;margin-bottom:6px"></div>
+    <input id="LM_q" oninput="renderLM()" style="width:100%;padding:8px;border:1px solid #ddd8cf;border-radius:8px;font-family:inherit;font-size:12px;outline:none;margin-bottom:8px" placeholder="取引先名・件名で検索">
+    <div id="LM_list" style="display:flex;flex-direction:column;gap:5px;max-height:48vh;overflow-y:auto"></div>
+  </div>
+</div>
 <div class="bar">
   <div class="sbox"><span style="color:#8a8279">🔍</span><input placeholder="検索…" id="Q" oninput="rT()"></div>
   <div class="pills"><button class="pill on" onclick="sf('all',this)">すべて</button><button class="pill" onclick="sf('warn',this)">⚠要確認</button><button class="pill" onclick="sf('group',this)">同一先</button></div>
@@ -465,8 +473,9 @@ function rMC(){
   h+='<div class="m-card" style="background:#f7f5f1;text-align:center"><div style="font-weight:700">\u5408\u8a08</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:20px;font-weight:700;color:#2d5a27;margin-top:4px">\u00a5'+F(tP)+'</div><div style="font-size:10px;color:#5c554a">'+fl.length+'\u4ef6</div></div>';
   mc.innerHTML=h;
 }
-function openMM(idx){
-  mmIdx=idx;var v=cL()[idx];
+var MMR=null;
+function openMMRow(v){
+  mmIdx=-1;MMR=v;
   document.getElementById('MM_title').textContent=v.name||'\u65b0\u898f';
   var fields=['name','date','recv','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
   fields.forEach(function(f){document.getElementById('mm_'+f).value=v[f]||''});
@@ -477,7 +486,8 @@ function openMM(idx){
   document.getElementById('mm_acType').value=v.acType||'\u666e\u901a';
   mCalc();document.getElementById('MM').classList.add('open');
 }
-function closeMM(){document.getElementById('MM').classList.remove('open');mmIdx=null}
+function openMM(idx){openMMRow(cL()[idx])}
+function closeMM(){document.getElementById('MM').classList.remove('open');mmIdx=null;MMR=null}
 function mCalc(){
   var s=parseInt(document.getElementById('mm_subtotal').value)||0,r=parseFloat(document.getElementById('mm_rate').value)||0;
   var w=parseInt(document.getElementById('mm_wh').value)||0,e=parseInt(document.getElementById('mm_exp').value)||0;
@@ -486,7 +496,7 @@ function mCalc(){
   document.getElementById('mm_ptot').textContent='\u00a5'+F(s+tax-w+e);
 }
 function saveMM(){
-  if(mmIdx===null)return;var v=cL()[mmIdx];
+  if(!MMR)return;var v=MMR;
   var fields=['name','date','recv','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
   fields.forEach(function(f){v[f]=document.getElementById('mm_'+f).value});
   v.rate=parseFloat(document.getElementById('mm_rate').value);
@@ -495,6 +505,7 @@ function saveMM(){
   v.exp=parseInt(document.getElementById('mm_exp').value)||null;
   v.acType=document.getElementById('mm_acType').value;
   closeMM();sv();rAll();
+  if(document.getElementById('PM').classList.contains('open'))rPay(lastGenka);
 }
 
 // ===== INLINE EDIT =====
@@ -678,8 +689,9 @@ var findFileByName=async function(dir,name,depth){
   }catch(e){}
   return null;
 };
-var openPdfIdx=async function(idx){
-  var v=cL()[idx];if(!v)return;
+var openPdfIdx=function(idx){var v=cL()[idx];if(v)openPdfRow(v)};
+var openPdfRow=async function(v){
+  if(!v)return;
   try{
     var blob=await idbGet('f:'+v.id).catch(function(){return null});
     if(!blob&&v.file){
@@ -764,16 +776,22 @@ function openPay(){
 function closePay(){document.getElementById('PM').classList.remove('open')}
 function nrm(s){return String(s||'').replace(/[\s\u3000]/g,'').replace(/株式会社|（株）|\(株\)|合同会社|カ\)|カ）/g,'').toLowerCase()}
 function allInv(){var a=[];for(var i=0;i<D.o.length;i++){var arr=D.m[D.o[i]]||[];for(var j=0;j<arr.length;j++)a.push(arr[j])}return a}
-var lastGenka=[];var payShowAll=false;
+var lastGenka=[];var payShowAll=false;var GFROM={y:2026,m:7};// 表示は2026年7月以降がデフォルト
 function togglePayAll(){payShowAll=!payShowAll;rPay(lastGenka)}
+function gsOf(id){if(!D.gs)D.gs={};var k=String(id);if(!D.gs[k])D.gs[k]={};return D.gs[k]}
+function rowById(id){var a=allInv();for(var i=0;i<a.length;i++)if(String(a[i].id)===String(id))return a[i];return null}
+function allInvT(){var out=[];for(var i=0;i<D.o.length;i++){var k=D.o[i];(D.m[k]||[]).forEach(function(v){out.push({t:k,v:v})})}return out}
+function gsInv(gid,on){gsOf(gid).inv=!!on;sv();rPay(lastGenka)}
+function gsRcpt(gid,on){gsOf(gid).rcpt=!!on;sv();rPay(lastGenka)}
+function gsUnlink(gid){var g=gsOf(gid);g.link=null;sv();rPay(lastGenka)}
 function rPay(rows){
   lastGenka=rows;
   var inv=allInv();
-  var now=new Date();var nowIdx=now.getFullYear()*12+now.getMonth()+1;
+  var fromIdx=GFROM.y*12+GFROM.m;
   var byM={},order=[],hidden=0;
   rows.forEach(function(g){
     var ym=pYM(g.pay_date)||pYM(g.date);var k=ym?yK(ym):'日付未定';
-    if(!payShowAll&&ym&&(ym.y*12+ym.m)<nowIdx){hidden++;return}
+    if(!payShowAll&&ym&&(ym.y*12+ym.m)<fromIdx){hidden++;return}
     if(!byM[k]){byM[k]=[];order.push(k)}byM[k].push(g);
   });
   order.sort(function(a,b){var x=kY(a),y=kY(b);if(!x)return 1;if(!y)return -1;return(x.y*12+x.m)-(y.y*12+y.m)});
@@ -782,19 +800,80 @@ function rPay(rows){
     var arr=byM[k],tot=0,rowsH='';
     arr.forEach(function(g){
       var amt=Number(g.amount)||0;tot+=amt;
-      var m=inv.some(function(v){if(!g.supplier||nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===(v.subtotal||0)});
+      var gs=gsOf(g.id);
+      var autoM=inv.some(function(v){if(!g.supplier||nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===Number(v.subtotal||0)});
+      var linked=gs.link?rowById(gs.link):null;
+      var received=(gs.inv===false)?false:(gs.inv===true||!!linked||autoM);
       var ank=(g.anken_company||'')+(g.anken_ip?'／'+g.anken_ip:'');
-      rowsH+='<tr><td style="white-space:nowrap">'+E(g.pay_date||g.date||'')+'</td><td>'+(g.supplier?E(g.supplier):'<span style="color:#c4371c">未入力</span>')+'</td><td style="color:#8a8279;font-size:10px">'+E(ank)+'</td><td>'+E(g.item||'')+'</td><td class="r">'+F(amt)+'</td><td class="c">'+(m?'<span class="tg a">\ud83d\udcc4\u3042\u308a</span>':'<span class="tg" style="background:#fef3f0;color:#c4371c">\u26a0\u672a\u53d7\u7406</span>')+'</td></tr>';
+      var ops='';
+      if(linked){
+        ops='<button class="btn" style="padding:2px 6px;font-size:10px" title="請求書PDFを開く" onclick="openPdfRow(rowById(\''+String(gs.link)+'\'))">📄</button> '
+           +'<button class="btn" style="padding:2px 6px;font-size:10px" title="請求書の内容を編集" onclick="openMMRow(rowById(\''+String(gs.link)+'\'))">✎</button> '
+           +'<button class="btn" style="padding:2px 6px;font-size:10px;color:#c4371c" title="紐づけ解除" onclick="gsUnlink(\''+E(String(g.id))+'\')">✕</button>';
+      }else{
+        ops='<button class="btn" style="padding:2px 6px;font-size:10px" onclick="openLink(\''+E(String(g.id))+'\')">🔗紐づけ</button>';
+      }
+      rowsH+='<tr>'
+        +'<td style="white-space:nowrap">'+E(g.pay_date||g.date||'')+'</td>'
+        +'<td>'+(g.supplier?E(g.supplier):'<span style="color:#c4371c">未入力</span>')+'</td>'
+        +'<td style="color:#8a8279;font-size:10px">'+E(ank)+'</td>'
+        +'<td>'+E(g.item||'')+'</td>'
+        +'<td class="r">'+F(amt)+'</td>'
+        +'<td class="c"><label style="cursor:pointer;white-space:nowrap"><input type="checkbox" '+(received?'checked':'')+' onchange="gsInv(\''+E(String(g.id))+'\',this.checked)"> '+(received?(linked?'<span class="tg a">受理(紐付)</span>':(gs.inv===true?'<span class="tg a">受理(手動)</span>':'<span class="tg a">受理(自動)</span>')):'<span class="tg" style="background:#fef3f0;color:#c4371c">未受理</span>')+'</label></td>'
+        +'<td class="c"><input type="checkbox" style="cursor:pointer" '+(gs.rcpt?'checked':'')+' onchange="gsRcpt(\''+E(String(g.id))+'\',this.checked)"></td>'
+        +'<td class="c" style="white-space:nowrap">'+ops+'</td>'
+        +'</tr>';
     });
     h+='<div style="margin:14px 0 4px;font-weight:700">'+E(k)+' <span style="color:#8a8279;font-weight:400">'+arr.length+'件</span> <span style="font-family:\'JetBrains Mono\',monospace;color:#2d5a27">\u00a5'+F(tot)+'</span></div>';
-    h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
+    h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th><th>領収書</th><th>操作</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
   });
-  if(!h)h='<div class="empty">'+(payShowAll?'原価データがありません':'今月以降の支払予定はありません')+'</div>';
-  var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'今月以降のみ表示':'過去分も表示('+hidden+'件)')+'</button>';
-  h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:10px;color:#8a8279">KOLが発注先へ支払う原価の予定（案件管理より・読取専用）。「\ud83d\udcc4あり」= 同じ支払先・金額の請求書を受理済み</div>'+toggle+'</div>'+h;
+  if(!h)h='<div class="empty">'+(payShowAll?'原価データがありません':'2026年7月以降の支払予定はありません')+'</div>';
+  var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'2026年7月以降のみ表示':'過去分も表示('+hidden+'件)')+'</button>';
+  h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px"><div style="font-size:10px;color:#8a8279">KOLが発注先へ支払う原価の予定（案件管理より・読取専用）。請求書✓・領収書✓・紐づけはこのアプリ側に保存されます</div>'+toggle+'</div>'+h;
   document.getElementById('PM_body').innerHTML=h;
 }
-
+// ===== 請求書との紐づけピッカー =====
+var LMGID=null;
+function openLink(gid){
+  LMGID=gid;
+  var g=null;lastGenka.forEach(function(x){if(String(x.id)===String(gid))g=x});
+  document.getElementById('LM_info').textContent=(g?((g.supplier||'未入力')+' / '+(g.item||'')+' / \u00a5'+F(Number(g.amount)||0)):'');
+  document.getElementById('LM_q').value=g&&g.supplier?g.supplier:'';
+  renderLM();
+  document.getElementById('LM').classList.add('open');
+}
+function closeLM(){document.getElementById('LM').classList.remove('open');LMGID=null}
+function renderLM(){
+  var q=nrm(document.getElementById('LM_q').value||'');
+  var g=null;lastGenka.forEach(function(x){if(String(x.id)===String(LMGID))g=x});
+  var gAmt=g?Number(g.amount)||0:0;
+  var items=allInvT();
+  items.sort(function(a,b){
+    function score(it){var s=0;var c=cc(it.v);
+      if(g&&g.supplier&&nrm(it.v.name)===nrm(g.supplier))s-=4;
+      if(gAmt&&(c.tot===gAmt||Number(it.v.subtotal||0)===gAmt))s-=2;
+      return s}
+    return score(a)-score(b);
+  });
+  var h='';var count=0;
+  for(var i=0;i<items.length&&count<40;i++){
+    var it=items[i],v=it.v;
+    if(q&&nrm(v.name).indexOf(q)<0&&nrm(v.subject).indexOf(q)<0)continue;
+    var c=cc(v);count++;
+    h+='<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #ddd8cf;border-radius:8px;font-size:11px">'
+      +'<span style="color:#8a8279;white-space:nowrap">'+E(it.t)+'</span>'
+      +'<span style="font-weight:600">'+E(v.name||'')+'</span>'
+      +'<span style="color:#8a8279;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">'+E(v.subject||'')+'</span>'
+      +'<span style="font-family:\'JetBrains Mono\',monospace;margin-left:auto">\u00a5'+F(c.tot)+'</span>'
+      +'<button class="btn" style="padding:2px 10px;font-size:10px" onclick="lmPick(\''+String(v.id)+'\')">\u9078\u629e</button></div>';
+  }
+  document.getElementById('LM_list').innerHTML=h||'<div class="empty">\u8a72\u5f53\u306a\u3057</div>';
+}
+function lmPick(rowId){
+  if(LMGID==null)return;
+  gsOf(LMGID).link=rowId;
+  sv();closeLM();rPay(lastGenka);
+}
 // ===== フォルダ取込（Chrome/Edge・パス指定で手動取込のみ） =====
 function idbOpen(){return new Promise(function(res,rej){var q=indexedDB.open('kolInvFS',1);q.onupgradeneeded=function(){q.result.createObjectStore('h')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error)}})}
 function idbSet(k,v){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('h','readwrite');tx.objectStore('h').put(v,k);tx.oncomplete=res;tx.onerror=function(){rej(tx.error)}})})}
