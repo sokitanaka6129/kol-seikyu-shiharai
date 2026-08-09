@@ -776,7 +776,10 @@ function openPay(){
 function closePay(){document.getElementById('PM').classList.remove('open')}
 function nrm(s){return String(s||'').replace(/[\s\u3000]/g,'').replace(/株式会社|（株）|\(株\)|合同会社|カ\)|カ）/g,'').toLowerCase()}
 function allInv(){var a=[];for(var i=0;i<D.o.length;i++){var arr=D.m[D.o[i]]||[];for(var j=0;j<arr.length;j++)a.push(arr[j])}return a}
-var lastGenka=[];var payShowAll=false;var GFROM={y:2026,m:7};var GDOCS=[];// 表示は2026年7月以降がデフォルト
+var lastGenka=[];var payShowAll=false;var GFROM={y:2026,m:7};var GDOCS=[];
+var PYQ='';var PYF='all';// all|miss|ok
+function pySearch(v){PYQ=v;rPay(lastGenka);var el=document.getElementById('PY_q');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n)}}
+function pyFilter(f){PYF=f;rPay(lastGenka)}// 表示は2026年7月以降がデフォルト
 function togglePayAll(){payShowAll=!payShowAll;rPay(lastGenka)}
 function gsOf(id){if(!D.gs)D.gs={};var k=String(id);if(!D.gs[k])D.gs[k]={};return D.gs[k]}
 function rowById(id){var a=allInv();for(var i=0;i<a.length;i++)if(String(a[i].id)===String(id))return a[i];return null}
@@ -814,7 +817,10 @@ function rPay(rows){
     var arr=byM[k],tot=0,totG=0,totI=0,rowsH='';
     arr.forEach(function(g){
       if(g.__inv){
-        var v=g.__inv;var c2=cc(v);tot+=c2.tot;totI+=c2.tot;
+        var v=g.__inv;var c2=cc(v);
+        if(PYQ){var q2=nrm(PYQ);if(nrm(v.name).indexOf(q2)<0&&nrm(v.subject).indexOf(q2)<0)return}
+        if(PYF==='miss')return; // アプリ内請求書は受理済み扱い
+        tot+=c2.tot;totI+=c2.tot;
         rowsH+='<tr style="background:#f6f9fc">'
           +'<td style="white-space:nowrap">'+E(v.deadline||v.payBy||'')+'</td>'
           +'<td>'+E(v.name||'')+'</td>'
@@ -836,6 +842,9 @@ function rPay(rows){
       var hasDoc=GDOCS.indexOf(String(g.id))>=0;
       var received=(gs.inv===false)?false:(gs.inv===true||!!linked||autoM||hasDoc);
       var ank=(g.anken_company||'')+(g.anken_ip?'／'+g.anken_ip:'');
+      if(PYQ){var q=nrm(PYQ);if(nrm(g.supplier).indexOf(q)<0&&nrm(g.item).indexOf(q)<0&&nrm(ank).indexOf(q)<0){tot-=amt;totG-=amt;return}}
+      if(PYF==='miss'&&received){tot-=amt;totG-=amt;return}
+      if(PYF==='ok'&&!received){tot-=amt;totG-=amt;return}
       var ops='';
       if(linked){
         ops='<button class="btn" style="padding:2px 6px;font-size:10px" title="請求書PDFを開く" onclick="openPdfRow(rowById(\''+String(gs.link)+'\'))">📄</button> '
@@ -856,13 +865,22 @@ function rPay(rows){
         +'<td class="c" style="white-space:nowrap">'+ops+'</td>'
         +'</tr>';
     });
+    if(!rowsH)return;
     var bd=(totI>0&&totG>0)?' <span style="color:#8a8279;font-weight:400;font-size:10px">(\u539f\u4fa1\u00a5'+F(totG)+' + \u8acb\u6c42\u66f8\u00a5'+F(totI)+')</span>':'';
     h+='<div style="margin:14px 0 4px;font-weight:700">'+E(k)+' <span style="color:#8a8279;font-weight:400">'+arr.length+'件</span> <span style="font-family:\'JetBrains Mono\',monospace;color:#2d5a27">\u00a5'+F(tot)+'</span>'+bd+'</div>';
     h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th><th>領収書</th><th>操作</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
   });
   if(!h)h='<div class="empty">'+(payShowAll?'原価データがありません':'2026年7月以降の支払予定はありません')+'</div>';
   var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'2026年7月以降のみ表示':'過去分も表示('+hidden+'件)')+'</button>';
-  h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px"><div style="font-size:10px;color:#8a8279">その月に支払うものを全部表示：案件管理の原価＋原価に無いアプリ内請求書（青背景）。紐づけ・突合済みは二重計上しません。✓と紐づけはこのアプリ側に保存</div>'+toggle+'</div>'+h;
+  var ctrl='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap">'
+    +'<div class="sbox" style="max-width:220px"><span style="color:#8a8279">\ud83d\udd0d</span><input id="PY_q" value="'+E(PYQ)+'" oninput="pySearch(this.value)" placeholder="\u652f\u6255\u5148\u30fb\u5185\u5bb9\u30fb\u6848\u4ef6\u3067\u691c\u7d22"></div>'
+    +'<div class="pills">'
+    +'<button class="pill'+(PYF==='all'?' on':'')+'" onclick="pyFilter(\'all\')">\u3059\u3079\u3066</button>'
+    +'<button class="pill'+(PYF==='miss'?' on':'')+'" onclick="pyFilter(\'miss\')">\u26a0\u672a\u53d7\u7406\u306e\u307f</button>'
+    +'<button class="pill'+(PYF==='ok'?' on':'')+'" onclick="pyFilter(\'ok\')">\u53d7\u7406\u6e08\u306e\u307f</button>'
+    +'</div>'
+    +'<span style="font-size:9px;color:#8a8279;margin-left:auto">\u539f\u4fa1\u306e\u4fee\u6b63\u306f\u6848\u4ef6\u7ba1\u7406\u30a2\u30d7\u30ea\u3067</span></div>';
+  h=ctrl+'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px"><div style="font-size:10px;color:#8a8279">その月に支払うものを全部表示：案件管理の原価＋原価に無いアプリ内請求書（青背景）。紐づけ・突合済みは二重計上しません。✓と紐づけはこのアプリ側に保存</div>'+toggle+'</div>'+h;
   document.getElementById('PM_body').innerHTML=h;
 }
 // ===== 請求書との紐づけピッカー =====
@@ -982,33 +1000,47 @@ function closeFM(){document.getElementById('FM').classList.remove('open')}
 var importByPath=async function(){
   var msg=document.getElementById('FM_msg');
   msg.style.color='#c4371c';
-  if(!ROOTH){msg.textContent='フォルダ未接続です。開き直してください';return}
-  var raw=(document.getElementById('FM_path').value||'').trim();
-  if(!raw){msg.textContent='パスを入力してください';return}
-  var segs=raw.split(/[\/\\]+/).map(function(s){return s.trim()}).filter(function(s){return s});
-  var ri=segs.lastIndexOf(ROOTH.name);
-  if(ri>=0)segs=segs.slice(ri+1);
-  var dir=ROOTH,ctx={pay:null,recv:null,anchor:null};
-  for(var i=0;i<segs.length;i++){
-    try{dir=await dir.getDirectoryHandle(segs[i])}
-    catch(e){
-      var names=[];try{for await (var en of dir.values()){if(en.kind==='directory')names.push(en.name)}}catch(e2){}
-      msg.textContent='「'+segs[i]+'」が見つかりません。この階層のフォルダ: '+(names.slice(0,10).join(' / ')||'(なし)');
-      return;
+  try{
+    msg.style.color='#5c554a';msg.textContent='フォルダを確認中…';
+    if(!ROOTH){ROOTH=await idbGet('dir').catch(function(){return null})}
+    if(!ROOTH){msg.style.color='#c4371c';msg.textContent='フォルダ未接続です。一度閉じて📂を押し直してください';return}
+    var perm=await ROOTH.queryPermission({mode:'read'});
+    if(perm!=='granted')perm=await ROOTH.requestPermission({mode:'read'});
+    if(perm!=='granted'){msg.style.color='#c4371c';msg.textContent='フォルダへのアクセスが許可されていません';return}
+    var raw=(document.getElementById('FM_path').value||'').trim();
+    if(!raw){msg.style.color='#c4371c';msg.textContent='パスを入力してください';return}
+    var segs=raw.split(/[\/\\]+/).map(function(s){return s.trim()}).filter(function(s){return s});
+    var ri=segs.lastIndexOf(ROOTH.name);
+    if(ri>=0)segs=segs.slice(ri+1);
+    var dir=ROOTH,ctx={pay:null,recv:null,anchor:null};
+    for(var i=0;i<segs.length;i++){
+      try{dir=await dir.getDirectoryHandle(segs[i])}
+      catch(e){
+        var names=[];try{for await (var en of dir.values()){if(en.kind==='directory')names.push(en.name)}}catch(e2){}
+        msg.style.color='#c4371c';
+        msg.textContent='「'+segs[i]+'」が見つかりません。この階層のフォルダ: '+(names.slice(0,10).join(' / ')||'(なし)');
+        return;
+      }
+      ctx=stepCtx(segs[i],ctx);
     }
-    ctx=stepCtx(segs[i],ctx);
-  }
-  var all=[];await collectPdfs(dir,ctx,all);
-  var known=allInv().map(function(v){return v.file});
-  var files=all.filter(function(x){return known.indexOf(x.e.name)<0});
-  if(!files.length){msg.textContent='このフォルダに未取込のPDFはありません（表にある同名ファイルは除外済み）';return}
-  if(!confirm(files.length+'件のPDFを読み取りますか？\n（1件ごとにAPIクレジットを少し消費します）'))return;
-  try{localStorage.setItem('kolInvLastPath',raw)}catch(e){}
-  closeFM();
-  for(var i=0;i<files.length;i++){
-    var f=await files[i].e.getFile();
-    doP(f,files[i].pay,files[i].recv);
-    await new Promise(function(r){setTimeout(r,1200)});
+    msg.textContent='PDFを探しています…';
+    var all=[];await collectPdfs(dir,ctx,all);
+    var known=allInv().map(function(v){return v.file});
+    var files=all.filter(function(x){return known.indexOf(x.e.name)<0});
+    if(!all.length){msg.style.color='#c4371c';msg.textContent='このフォルダにPDFがありません（サブフォルダ含めて0件）';return}
+    if(!files.length){msg.style.color='#c4371c';msg.textContent='PDFは'+all.length+'件ありますが、すべて表に同名ファイルがあるため取込済み扱いです';return}
+    if(!confirm(files.length+'件のPDFを読み取りますか？\n（1件ごとにAPIクレジットを少し消費します）'))return;
+    try{localStorage.setItem('kolInvLastPath',raw)}catch(e){}
+    closeFM();
+    for(var i=0;i<files.length;i++){
+      var f=await files[i].e.getFile();
+      doP(f,files[i].pay,files[i].recv);
+      await new Promise(function(r){setTimeout(r,1200)});
+    }
+  }catch(err){
+    console.error('importByPath',err);
+    msg.style.color='#c4371c';
+    msg.textContent='エラー: '+err.message+'（このメッセージを開発者に伝えてください）';
   }
 };
 // 自動スキャンなし: 読取は「フォルダボタン→パス入力→確認OK」の手動操作のみ
