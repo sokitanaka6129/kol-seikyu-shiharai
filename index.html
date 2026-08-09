@@ -207,7 +207,18 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
 </div>
 <div class="tw"><div class="tc"><table><thead id="TH"></thead><tbody id="TB"></tbody></table></div></div>
 <div class="mobile-cards" id="MC"></div>
-<div class="m-modal" id="MM" onclick="if(event.target===this)closeMM()">
+<div class="m-modal" id="RV" onclick="if(event.target===this)closeRV()" style="z-index:320">
+  <div class="m-modal-box" style="max-width:900px;border-radius:16px;margin:auto;max-height:88vh">
+    <div class="m-modal-hd"><h3>📄 読取結果の確認</h3><button class="btn" onclick="closeRV()">✕</button></div>
+    <div style="font-size:10px;color:#8a8279;margin-bottom:8px">内容を確認してから追加してください。✓を外すとその行は追加されません。📄=元PDFを表示、✎=修正</div>
+    <div id="RV_list" style="overflow-x:auto"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button class="btn" onclick="canPQ();closeRV()">全て取消</button>
+      <button class="btn-p" id="RV_add" style="padding:8px 20px;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer" onclick="okPQ()">チェックした行を追加</button>
+    </div>
+  </div>
+</div>
+<div class="m-modal" id="MM" onclick="if(event.target===this)closeMM()" style="z-index:500">
   <div class="m-modal-box">
     <div class="m-modal-hd"><h3 id="MM_title">編集</h3><button class="btn" onclick="closeMM()">✕</button></div>
     <div class="m-form">
@@ -506,6 +517,7 @@ function saveMM(){
   v.acType=document.getElementById('mm_acType').value;
   closeMM();sv();rAll();
   if(document.getElementById('PM').classList.contains('open'))rPay(lastGenka);
+  if(document.getElementById('RV').classList.contains('open'))renderRV();
 }
 
 // ===== INLINE EDIT =====
@@ -675,10 +687,60 @@ function apR(p,fn){
 function sCfm(){
   if(!PDQ.length)return;var tabs={};for(var i=0;i<PDQ.length;i++){var t=PDQ[i].tab;if(!tabs[t])tabs[t]=0;tabs[t]++}
   var desc=Object.keys(tabs).map(function(t){return t+'\u306b'+tabs[t]+'\u4ef6'}).join(', ');
-  document.getElementById('CF').innerHTML='<div class="cfm"><div><b>'+PDQ.length+'\u4ef6</b>\u8aad\u53d6\u5b8c\u4e86('+desc+')</div><div style="display:flex;gap:6px"><button class="btn" style="font-size:10px;padding:3px 8px" onclick="canPQ()">\u53d6\u6d88</button><button class="btn-p" style="font-size:10px;padding:3px 8px;border-radius:8px;border:none;cursor:pointer" onclick="okPQ()">\u8ffd\u52a0</button></div></div>';
+  document.getElementById('CF').innerHTML='<div class="cfm"><div><b>'+PDQ.length+'\u4ef6</b>\u8aad\u53d6\u5b8c\u4e86('+desc+')</div><div style="display:flex;gap:6px"><button class="btn" style="font-size:10px;padding:3px 8px" onclick="canPQ()">\u53d6\u6d88</button><button class="btn-p" style="font-size:10px;padding:3px 8px;border-radius:8px;border:none;cursor:pointer" onclick="openRV()">\u5185\u5bb9\u3092\u78ba\u8a8d\u3057\u3066\u8ffd\u52a0</button></div></div>';
 }
-function okPQ(){for(var i=0;i<PDQ.length;i++){eT(PDQ[i].tab);D.m[PDQ[i].tab].push(PDQ[i].inv)}AM=PDQ[PDQ.length-1].tab;PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML='';sv();rAll()}
-function canPQ(){PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML=''}
+function openRV(){renderRV();document.getElementById('RV').classList.add('open')}
+function closeRV(){document.getElementById('RV').classList.remove('open')}
+function rvOpts(sel){
+  var h='';
+  for(var k=0;k<D.o.length;k++)h+='<option value="'+E(D.o[k])+'"'+(D.o[k]===sel?' selected':'')+'>'+E(D.o[k])+'</option>';
+  var base=D.o.length?kY(D.o[D.o.length-1]):null;var n=new Date();if(!base)base={y:n.getFullYear(),m:n.getMonth()+1};
+  for(var fm=1;fm<=3;fm++){var nx=aM(base,fm);var nk=yK(nx);if(D.o.indexOf(nk)<0)h+='<option value="'+nk+'"'+(nk===sel?' selected':'')+'>'+nk+'</option>'}
+  if(sel&&h.indexOf('value="'+E(sel)+'"')<0)h='<option value="'+E(sel)+'" selected>'+E(sel)+'</option>'+h;
+  return h;
+}
+function renderRV(){
+  if(!PDQ.length){closeRV();return}
+  var h='<table><thead><tr><th></th><th>\u30d5\u30a1\u30a4\u30eb</th><th>\u53d6\u5f15\u5148</th><th>\u767a\u884c\u65e5</th><th>\u4ef6\u540d</th><th>\u7a0e\u7387</th><th class="r">\u7a0e\u629c</th><th class="r">\u6e90\u6cc9</th><th class="r">\u5b9f\u8cbb</th><th class="r">\u7a0e\u8fbc\u652f\u6255\u984d</th><th>\u632f\u5206\u6708</th><th>\u64cd\u4f5c</th></tr></thead><tbody>';
+  var selCount=0;
+  for(var i=0;i<PDQ.length;i++){
+    var q=PDQ[i],v=q.inv,c=cc(v);if(!q.skip)selCount++;
+    var wr=v.note&&v.note.indexOf('\u26a0')>=0;
+    h+='<tr'+(q.skip?' style="opacity:.45"':(wr?' class="w"':''))+'>'
+      +'<td class="c"><input type="checkbox" '+(q.skip?'':'checked')+' onchange="rvToggle('+i+',this.checked)"></td>'
+      +'<td class="nt" style="max-width:120px;overflow:hidden;text-overflow:ellipsis">'+E(v.file||'')+'</td>'
+      +'<td style="font-weight:600">'+E(v.name||'')+(wr?' <span class="wi" title="'+E(v.note||'')+'">\u26a0</span>':'')+'</td>'
+      +'<td style="white-space:nowrap">'+E(v.date||'')+'</td>'
+      +'<td class="nt" style="max-width:150px;overflow:hidden;text-overflow:ellipsis">'+E(v.subject||'')+'</td>'
+      +'<td class="c">'+Math.round((Number(v.rate)||0)*100)+'%</td>'
+      +'<td class="r">'+F(v.subtotal||0)+'</td>'
+      +'<td class="r">'+(v.wh?F(v.wh):'')+'</td>'
+      +'<td class="r">'+(v.exp?F(v.exp):'')+'</td>'
+      +'<td class="r" style="font-weight:700">'+F(c.tot)+'</td>'
+      +'<td><select class="mv" onchange="rvTab('+i+',this.value)">'+rvOpts(q.tab)+'</select></td>'
+      +'<td class="c" style="white-space:nowrap">'
+      +'<button class="btn" style="padding:2px 6px;font-size:10px" title="\u5143PDF\u3092\u8868\u793a" onclick="openPdfRow(PDQ['+i+'].inv)">\ud83d\udcc4</button> '
+      +'<button class="btn" style="padding:2px 6px;font-size:10px" title="\u5185\u5bb9\u3092\u4fee\u6b63" onclick="openMMRow(PDQ['+i+'].inv)">\u270e</button>'
+      +'</td></tr>';
+  }
+  h+='</tbody></table>';
+  document.getElementById('RV_list').innerHTML=h;
+  var btn=document.getElementById('RV_add');if(btn)btn.textContent='\u30c1\u30a7\u30c3\u30af\u3057\u305f'+selCount+'\u4ef6\u3092\u8ffd\u52a0';
+}
+function rvToggle(i,on){if(PDQ[i])PDQ[i].skip=!on;renderRV()}
+function rvTab(i,val){if(PDQ[i])PDQ[i].tab=val}
+function okPQ(){
+  var added=0,lastTab=null;
+  for(var i=0;i<PDQ.length;i++){
+    if(PDQ[i].skip)continue;
+    eT(PDQ[i].tab);D.m[PDQ[i].tab].push(PDQ[i].inv);added++;lastTab=PDQ[i].tab;
+  }
+  if(!added){alert('\u8ffd\u52a0\u3059\u308b\u884c\u306b\u30c1\u30a7\u30c3\u30af\u3092\u5165\u308c\u3066\u304f\u3060\u3055\u3044');return}
+  if(lastTab&&VMODE==='pay')AM=lastTab;
+  PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML='';
+  closeRV();sv();rAll();
+}
+function canPQ(){PDQ=[];document.getElementById('CF').innerHTML='';document.getElementById('PR').innerHTML='';closeRV()}
 var findFileByName=async function(dir,name,depth){
   if(depth>6)return null;
   try{
