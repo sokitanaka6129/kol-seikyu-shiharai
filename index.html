@@ -794,7 +794,10 @@ function rPay(rows){
   var byM={},order=[],hidden=0;
   rows.forEach(function(g){
     var ym=pYM(g.pay_date)||pYM(g.date);var k=ym?yK(ym):'日付未定';
-    if(!payShowAll&&ym&&(ym.y*12+ym.m)<fromIdx){hidden++;return}
+    if(!payShowAll){
+      if(!ym){hidden++;return} // 支払日未定はデフォルト非表示
+      if((ym.y*12+ym.m)<fromIdx){hidden++;return}
+    }
     if(!byM[k]){byM[k]=[];order.push(k)}byM[k].push(g);
   });
   // ===== アプリ内の請求書を統合（原価と重複しないもののみ） =====
@@ -871,7 +874,7 @@ function rPay(rows){
     h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th><th>領収書</th><th>操作</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
   });
   if(!h)h='<div class="empty">'+(payShowAll?'原価データがありません':'2026年7月以降の支払予定はありません')+'</div>';
-  var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'2026年7月以降のみ表示':'過去分も表示('+hidden+'件)')+'</button>';
+  var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'2026年7月以降のみ表示':'過去分・日付未定も表示('+hidden+'件)')+'</button>';
   var ctrl='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap">'
     +'<div class="sbox" style="max-width:220px"><span style="color:#8a8279">\ud83d\udd0d</span><input id="PY_q" value="'+E(PYQ)+'" oninput="pySearch(this.value)" placeholder="\u652f\u6255\u5148\u30fb\u5185\u5bb9\u30fb\u6848\u4ef6\u3067\u691c\u7d22"></div>'
     +'<div class="pills">'

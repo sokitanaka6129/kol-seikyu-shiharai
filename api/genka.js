@@ -63,17 +63,22 @@ export default async function handler(req, res) {
     // ===== 通常: 原価一覧＋案件情報＋書類ありIDリスト（すべて読取専用） =====
     const [rG, rA, docs] = await Promise.all([
       fetch(`${url}/rest/v1/genka?select=id,anken_id,date,item,supplier,amount,pay_date&order=pay_date.asc.nullslast&limit=1000`, { headers }),
-      fetch(`${url}/rest/v1/ankens?select=id,company,ip&limit=1000`, { headers }),
+      fetch(`${url}/rest/v1/ankens?select=id,company,ip,lost&limit=1000`, { headers }),
       listDir('genka')
     ]);
     if (!rG.ok) {
       const err = await rG.text();
       return res.status(rG.status).json({ error: err });
     }
-    const rows = await rG.json();
+    let rows = await rG.json();
     const ankens = rA.ok ? await rA.json() : [];
     const map = {};
     for (const a of ankens) map[a.id] = a;
+    // 失注(lost=true)案件の原価は除外（案件管理と完全連携）
+    rows = rows.filter(g => {
+      const a = map[g.anken_id];
+      return !(a && a.lost === true);
+    });
     for (const g of rows) {
       const a = map[g.anken_id];
       g.anken_company = a ? a.company : '';
