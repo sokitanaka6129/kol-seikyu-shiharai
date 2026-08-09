@@ -836,7 +836,8 @@ function openPay(){
   .catch(function(e){document.getElementById('PM_body').innerHTML='<div class="empty" style="color:#c4371c">'+E(e.message)+'</div>'});
 }
 function closePay(){document.getElementById('PM').classList.remove('open')}
-function nrm(s){return String(s||'').replace(/[\s\u3000]/g,'').replace(/株式会社|（株）|\(株\)|合同会社|カ\)|カ）/g,'').toLowerCase()}
+function nrm(s){return String(s||'').replace(/[\s\u3000]/g,'').replace(/株式会社|（株）|\(株\)|株\)|株）|㊈|合同会社|有限会社|カ\)|カ）/g,'').toLowerCase()}
+function nmMatch(a,b){a=nrm(a);b=nrm(b);if(!a||!b)return false;if(a===b)return true;if(a.length>=2&&b.length>=2&&(a.indexOf(b)>=0||b.indexOf(a)>=0))return true;return false}
 function allInv(){var a=[];for(var i=0;i<D.o.length;i++){var arr=D.m[D.o[i]]||[];for(var j=0;j<arr.length;j++)a.push(arr[j])}return a}
 var lastGenka=[];var payShowAll=false;var GFROM={y:2026,m:7};var GDOCS=[];
 var PYQ='';var PYF='all';// all|miss|ok
@@ -868,7 +869,7 @@ function rPay(rows){
     var v=it.v;
     if(linkedIds[String(v.id)])return; // 原価と紐づけ済み → 原価行でカバー
     var c=cc(v);
-    var matched=rows.some(function(g){var amt=Number(g.amount)||0;return g.supplier&&nrm(g.supplier)===nrm(v.name)&&(amt===c.tot||amt===Number(v.subtotal||0))});
+    var matched=rows.some(function(g){var amt=Number(g.amount)||0;return g.supplier&&nmMatch(g.supplier,v.name)&&(amt===c.tot||amt===Number(v.subtotal||0))});
     if(matched)return; // 支払先・金額一致の原価あり → 原価行でカバー
     var ym=kY(it.t);
     if(!payShowAll&&ym&&(ym.y*12+ym.m)<fromIdx){hidden++;return}
@@ -893,7 +894,6 @@ function rPay(rows){
           +'<td>'+E(v.subject||'')+'</td>'
           +'<td class="r">'+F(c2.tot)+'</td>'
           +'<td class="c"><span class="tg a">\u53d7\u7406\u6e08</span></td>'
-          +'<td class="c">\u2014</td>'
           +'<td class="c" style="white-space:nowrap">'
           +'<button class="btn" style="padding:2px 6px;font-size:10px" title="PDF\u3092\u958b\u304f" onclick="openPdfRow(rowById(\''+String(v.id)+'\'))">\ud83d\udcc4</button> '
           +'<button class="btn" style="padding:2px 6px;font-size:10px" title="\u7de8\u96c6" onclick="openMMRow(rowById(\''+String(v.id)+'\'))">\u270e</button>'
@@ -902,7 +902,9 @@ function rPay(rows){
       }
       var amt=Number(g.amount)||0;tot+=amt;totG+=amt;
       var gs=gsOf(g.id);
-      var autoM=inv.some(function(v){if(!g.supplier||nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===Number(v.subtotal||0)});
+      var mrow=null;
+      for(var mi=0;mi<inv.length;mi++){var vv=inv[mi];if(!g.supplier||!nmMatch(vv.name,g.supplier))continue;var cx=cc(vv);if(amt===cx.tot||amt===Number(vv.subtotal||0)){mrow=vv;break}}
+      var autoM=!!mrow;
       var linked=gs.link?rowById(gs.link):null;
       var hasDoc=GDOCS.indexOf(String(g.id))>=0;
       var received=(gs.inv===false)?false:(gs.inv===true||!!linked||autoM||hasDoc);
@@ -915,6 +917,10 @@ function rPay(rows){
         ops='<button class="btn" style="padding:2px 6px;font-size:10px" title="請求書PDFを開く" onclick="openPdfRow(rowById(\''+String(gs.link)+'\'))">📄</button> '
            +'<button class="btn" style="padding:2px 6px;font-size:10px" title="請求書の内容を編集" onclick="openMMRow(rowById(\''+String(gs.link)+'\'))">✎</button> '
            +'<button class="btn" style="padding:2px 6px;font-size:10px;color:#c4371c" title="紐づけ解除" onclick="gsUnlink(\''+E(String(g.id))+'\')">✕</button>';
+      }else if(mrow){
+        ops='<button class="btn" style="padding:2px 6px;font-size:10px" title="\u7a81\u5408\u3055\u308c\u305f\u8acb\u6c42\u66f8PDF\u3092\u958b\u304f" onclick="openPdfRow(rowById(\''+String(mrow.id)+'\'))">\ud83d\udcc4</button> '
+           +'<button class="btn" style="padding:2px 6px;font-size:10px" title="\u7a81\u5408\u3055\u308c\u305f\u8acb\u6c42\u66f8\u3092\u7de8\u96c6" onclick="openMMRow(rowById(\''+String(mrow.id)+'\'))">\u270e</button> '
+           +'<button class="btn" style="padding:2px 6px;font-size:10px" onclick="openLink(\''+E(String(g.id))+'\')">\ud83d\udd17</button>';
       }else{
         ops='<button class="btn" style="padding:2px 6px;font-size:10px" onclick="openLink(\''+E(String(g.id))+'\')">🔗紐づけ</button>';
       }
@@ -926,14 +932,14 @@ function rPay(rows){
         +'<td>'+E(g.item||'')+'</td>'
         +'<td class="r">'+F(amt)+'</td>'
         +'<td class="c"><label style="cursor:pointer;white-space:nowrap"><input type="checkbox" '+(received?'checked':'')+' onchange="gsInv(\''+E(String(g.id))+'\',this.checked)"> '+(received?(linked?'<span class="tg a">受理(紐付)</span>':(gs.inv===true?'<span class="tg a">受理(手動)</span>':(hasDoc?'<span class="tg a">受理(添付)</span>':'<span class="tg a">受理(自動)</span>'))):'<span class="tg" style="background:#fef3f0;color:#c4371c">未受理</span>')+'</label></td>'
-        +'<td class="c"><input type="checkbox" style="cursor:pointer" '+(gs.rcpt?'checked':'')+' onchange="gsRcpt(\''+E(String(g.id))+'\',this.checked)"></td>'
+
         +'<td class="c" style="white-space:nowrap">'+ops+'</td>'
         +'</tr>';
     });
     if(!rowsH)return;
     var bd=(totI>0&&totG>0)?' <span style="color:#8a8279;font-weight:400;font-size:10px">(\u539f\u4fa1\u00a5'+F(totG)+' + \u8acb\u6c42\u66f8\u00a5'+F(totI)+')</span>':'';
     h+='<div style="margin:14px 0 4px;font-weight:700">'+E(k)+' <span style="color:#8a8279;font-weight:400">'+arr.length+'件</span> <span style="font-family:\'JetBrains Mono\',monospace;color:#2d5a27">\u00a5'+F(tot)+'</span>'+bd+'</div>';
-    h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th><th>領収書</th><th>操作</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
+    h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th><th>操作</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
   });
   if(!h)h='<div class="empty">'+(payShowAll?'原価データがありません':'2026年7月以降の支払予定はありません')+'</div>';
   var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'2026年7月以降のみ表示':'過去分・日付未定も表示('+hidden+'件)')+'</button>';
@@ -966,7 +972,7 @@ function renderLM(){
   var items=allInvT();
   items.sort(function(a,b){
     function score(it){var s=0;var c=cc(it.v);
-      if(g&&g.supplier&&nrm(it.v.name)===nrm(g.supplier))s-=4;
+      if(g&&g.supplier&&nmMatch(it.v.name,g.supplier))s-=4;
       if(gAmt&&(c.tot===gAmt||Number(it.v.subtotal||0)===gAmt))s-=2;
       return s}
     return score(a)-score(b);
