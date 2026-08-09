@@ -794,12 +794,42 @@ function rPay(rows){
     if(!payShowAll&&ym&&(ym.y*12+ym.m)<fromIdx){hidden++;return}
     if(!byM[k]){byM[k]=[];order.push(k)}byM[k].push(g);
   });
+  // ===== アプリ内の請求書を統合（原価と重複しないもののみ） =====
+  var linkedIds={};Object.keys(D.gs||{}).forEach(function(kk){var l=(D.gs[kk]||{}).link;if(l)linkedIds[String(l)]=1});
+  allInvT().forEach(function(it){
+    var v=it.v;
+    if(linkedIds[String(v.id)])return; // 原価と紐づけ済み → 原価行でカバー
+    var c=cc(v);
+    var matched=rows.some(function(g){var amt=Number(g.amount)||0;return g.supplier&&nrm(g.supplier)===nrm(v.name)&&(amt===c.tot||amt===Number(v.subtotal||0))});
+    if(matched)return; // 支払先・金額一致の原価あり → 原価行でカバー
+    var ym=kY(it.t);
+    if(!payShowAll&&ym&&(ym.y*12+ym.m)<fromIdx){hidden++;return}
+    var k=ym?it.t:'日付未定';
+    if(!byM[k]){byM[k]=[];order.push(k)}
+    byM[k].push({__inv:v});
+  });
   order.sort(function(a,b){var x=kY(a),y=kY(b);if(!x)return 1;if(!y)return -1;return(x.y*12+x.m)-(y.y*12+y.m)});
   var h='';
   order.forEach(function(k){
-    var arr=byM[k],tot=0,rowsH='';
+    var arr=byM[k],tot=0,totG=0,totI=0,rowsH='';
     arr.forEach(function(g){
-      var amt=Number(g.amount)||0;tot+=amt;
+      if(g.__inv){
+        var v=g.__inv;var c2=cc(v);tot+=c2.tot;totI+=c2.tot;
+        rowsH+='<tr style="background:#f6f9fc">'
+          +'<td style="white-space:nowrap">'+E(v.deadline||v.payBy||'')+'</td>'
+          +'<td>'+E(v.name||'')+'</td>'
+          +'<td><span class="tg b">\u30a2\u30d7\u30ea\u5185\u8acb\u6c42\u66f8</span><span style="color:#8a8279;font-size:10px"> \u539f\u4fa1\u672a\u767b\u9332</span></td>'
+          +'<td>'+E(v.subject||'')+'</td>'
+          +'<td class="r">'+F(c2.tot)+'</td>'
+          +'<td class="c"><span class="tg a">\u53d7\u7406\u6e08</span></td>'
+          +'<td class="c">\u2014</td>'
+          +'<td class="c" style="white-space:nowrap">'
+          +'<button class="btn" style="padding:2px 6px;font-size:10px" title="PDF\u3092\u958b\u304f" onclick="openPdfRow(rowById(\''+String(v.id)+'\'))">\ud83d\udcc4</button> '
+          +'<button class="btn" style="padding:2px 6px;font-size:10px" title="\u7de8\u96c6" onclick="openMMRow(rowById(\''+String(v.id)+'\'))">\u270e</button>'
+          +'</td></tr>';
+        return;
+      }
+      var amt=Number(g.amount)||0;tot+=amt;totG+=amt;
       var gs=gsOf(g.id);
       var autoM=inv.some(function(v){if(!g.supplier||nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===Number(v.subtotal||0)});
       var linked=gs.link?rowById(gs.link):null;
@@ -826,12 +856,13 @@ function rPay(rows){
         +'<td class="c" style="white-space:nowrap">'+ops+'</td>'
         +'</tr>';
     });
-    h+='<div style="margin:14px 0 4px;font-weight:700">'+E(k)+' <span style="color:#8a8279;font-weight:400">'+arr.length+'件</span> <span style="font-family:\'JetBrains Mono\',monospace;color:#2d5a27">\u00a5'+F(tot)+'</span></div>';
+    var bd=(totI>0&&totG>0)?' <span style="color:#8a8279;font-weight:400;font-size:10px">(\u539f\u4fa1\u00a5'+F(totG)+' + \u8acb\u6c42\u66f8\u00a5'+F(totI)+')</span>':'';
+    h+='<div style="margin:14px 0 4px;font-weight:700">'+E(k)+' <span style="color:#8a8279;font-weight:400">'+arr.length+'件</span> <span style="font-family:\'JetBrains Mono\',monospace;color:#2d5a27">\u00a5'+F(tot)+'</span>'+bd+'</div>';
     h+='<div class="tc" style="overflow-x:auto"><table><thead><tr><th>支払日</th><th>支払先</th><th>案件(クライアント)</th><th>内容</th><th class="r">金額</th><th>請求書</th><th>領収書</th><th>操作</th></tr></thead><tbody>'+rowsH+'</tbody></table></div>';
   });
   if(!h)h='<div class="empty">'+(payShowAll?'原価データがありません':'2026年7月以降の支払予定はありません')+'</div>';
   var toggle='<button class="btn" style="font-size:10px" onclick="togglePayAll()">'+(payShowAll?'2026年7月以降のみ表示':'過去分も表示('+hidden+'件)')+'</button>';
-  h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px"><div style="font-size:10px;color:#8a8279">KOLが発注先へ支払う原価の予定（案件管理より・読取専用）。請求書✓・領収書✓・紐づけはこのアプリ側に保存されます</div>'+toggle+'</div>'+h;
+  h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px"><div style="font-size:10px;color:#8a8279">その月に支払うものを全部表示：案件管理の原価＋原価に無いアプリ内請求書（青背景）。紐づけ・突合済みは二重計上しません。✓と紐づけはこのアプリ側に保存</div>'+toggle+'</div>'+h;
   document.getElementById('PM_body').innerHTML=h;
 }
 // ===== 請求書との紐づけピッカー =====
