@@ -23,13 +23,48 @@ export default async function handler(req, res) {
   if (!url || !key) {
     return res.status(503).json({ error: 'Supabase not configured' });
   }
+  const headers = { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
+  const BUCKET = 'genka-docs';
+
+  async function listDir(prefix) {
+    const r = await fetch(`${url}/storage/v1/object/list/${BUCKET}`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ prefix, limit: 1000, offset: 0, sortBy: { column: 'name', order: 'asc' } })
+    });
+    if (!r.ok) return [];
+    return await r.json();
+  }
+  async function signPath(path) {
+    const r = await fetch(`${url}/storage/v1/object/sign/${BUCKET}/${path}`, {
+      method: 'POST', headers, body: JSON.stringify({ expiresIn: 3600 })
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.signedURL ? `${url}/storage/v1${j.signedURL}` : null;
+  }
 
   try {
-    // 読取専用: 案件管理アプリの原価一覧と案件情報を SELECT するだけ（書き込みは一切しない）
-    const headers = { 'apikey': key, 'Authorization': `Bearer ${key}` };
-    const [rG, rA] = await Promise.all([
+    // ===== ?docs=<原価ID> : その原価に添付された書類の署名付きURL一覧 =====
+    if (req.query && req.query.docs) {
+      const gid = String(req.query.docs).replace(/[^a-zA-Z0-9_-]/g, '');
+      const kinds = ['invoice', 'receipt', 'other'];
+      const files = [];
+      for (const kind of kinds) {
+        const entries = await listDir(`genka/${gid}/${kind}`);
+        for (const e of entries) {
+          if (!e || !e.name || e.id === null) continue; // フォルダは除外
+          const signed = await signPath(`genka/${gid}/${kind}/${e.name}`);
+          if (signed) files.push({ name: e.name, kind, url: signed });
+        }
+      }
+      return res.status(200).json({ files });
+    }
+
+    // ===== 通常: 原価一覧＋案件情報＋書類ありIDリスト（すべて読取専用） =====
+    const [rG, rA, docs] = await Promise.all([
       fetch(`${url}/rest/v1/genka?select=id,anken_id,date,item,supplier,amount,pay_date&order=pay_date.asc.nullslast&limit=1000`, { headers }),
-      fetch(`${url}/rest/v1/ankens?select=id,company,ip&limit=1000`, { headers })
+      fetch(`${url}/rest/v1/ankens?select=id,company,ip&limit=1000`, { headers }),
+      listDir('genka')
     ]);
     if (!rG.ok) {
       const err = await rG.text();
@@ -44,7 +79,9 @@ export default async function handler(req, res) {
       g.anken_company = a ? a.company : '';
       g.anken_ip = a ? a.ip : '';
     }
-    return res.status(200).json({ rows });
+    // Storage直下のフォルダ名 = 書類が添付されている原価ID
+    const doc_ids = (docs || []).filter(e => e && e.name).map(e => String(e.name));
+    return res.status(200).json({ rows, doc_ids });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

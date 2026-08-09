@@ -192,7 +192,7 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
     </div>
   </div>
 </div>
-<div class="m-modal" id="LM" onclick="if(event.target===this)closeLM()" style="z-index:250">
+<div class="m-modal" id="LM" onclick="if(event.target===this)closeLM()" style="z-index:400">
   <div class="m-modal-box" style="max-width:560px;border-radius:16px;margin:auto;max-height:80vh">
     <div class="m-modal-hd"><h3>🔗 請求書と紐づけ</h3><button class="btn" onclick="closeLM()">✕</button></div>
     <div id="LM_info" style="font-size:11px;color:#5c554a;margin-bottom:6px"></div>
@@ -770,13 +770,13 @@ function openPay(){
       document.getElementById('PM_body').innerHTML='<div class="empty" style="color:#c4371c">管理者用の合言葉が違います。閉じてもう一度開いてください。</div>';return null}
     if(!r.ok)throw new Error('取得失敗 '+r.status);
     return r.json();
-  }).then(function(res){if(res)rPay(res.rows||[])})
+  }).then(function(res){if(res){GDOCS=(res.doc_ids||[]).map(String);rPay(res.rows||[])}})
   .catch(function(e){document.getElementById('PM_body').innerHTML='<div class="empty" style="color:#c4371c">'+E(e.message)+'</div>'});
 }
 function closePay(){document.getElementById('PM').classList.remove('open')}
 function nrm(s){return String(s||'').replace(/[\s\u3000]/g,'').replace(/株式会社|（株）|\(株\)|合同会社|カ\)|カ）/g,'').toLowerCase()}
 function allInv(){var a=[];for(var i=0;i<D.o.length;i++){var arr=D.m[D.o[i]]||[];for(var j=0;j<arr.length;j++)a.push(arr[j])}return a}
-var lastGenka=[];var payShowAll=false;var GFROM={y:2026,m:7};// 表示は2026年7月以降がデフォルト
+var lastGenka=[];var payShowAll=false;var GFROM={y:2026,m:7};var GDOCS=[];// 表示は2026年7月以降がデフォルト
 function togglePayAll(){payShowAll=!payShowAll;rPay(lastGenka)}
 function gsOf(id){if(!D.gs)D.gs={};var k=String(id);if(!D.gs[k])D.gs[k]={};return D.gs[k]}
 function rowById(id){var a=allInv();for(var i=0;i<a.length;i++)if(String(a[i].id)===String(id))return a[i];return null}
@@ -803,7 +803,8 @@ function rPay(rows){
       var gs=gsOf(g.id);
       var autoM=inv.some(function(v){if(!g.supplier||nrm(v.name)!==nrm(g.supplier))return false;var c=cc(v);return amt===c.tot||amt===Number(v.subtotal||0)});
       var linked=gs.link?rowById(gs.link):null;
-      var received=(gs.inv===false)?false:(gs.inv===true||!!linked||autoM);
+      var hasDoc=GDOCS.indexOf(String(g.id))>=0;
+      var received=(gs.inv===false)?false:(gs.inv===true||!!linked||autoM||hasDoc);
       var ank=(g.anken_company||'')+(g.anken_ip?'／'+g.anken_ip:'');
       var ops='';
       if(linked){
@@ -813,13 +814,14 @@ function rPay(rows){
       }else{
         ops='<button class="btn" style="padding:2px 6px;font-size:10px" onclick="openLink(\''+E(String(g.id))+'\')">🔗紐づけ</button>';
       }
+      if(hasDoc)ops='<button class="btn" style="padding:2px 6px;font-size:10px" title="案件管理に添付された書類を開く" onclick="gdocs(\''+E(String(g.id))+'\')">📎添付</button> '+ops;
       rowsH+='<tr>'
         +'<td style="white-space:nowrap">'+E(g.pay_date||g.date||'')+'</td>'
         +'<td>'+(g.supplier?E(g.supplier):'<span style="color:#c4371c">未入力</span>')+'</td>'
         +'<td style="color:#8a8279;font-size:10px">'+E(ank)+'</td>'
         +'<td>'+E(g.item||'')+'</td>'
         +'<td class="r">'+F(amt)+'</td>'
-        +'<td class="c"><label style="cursor:pointer;white-space:nowrap"><input type="checkbox" '+(received?'checked':'')+' onchange="gsInv(\''+E(String(g.id))+'\',this.checked)"> '+(received?(linked?'<span class="tg a">受理(紐付)</span>':(gs.inv===true?'<span class="tg a">受理(手動)</span>':'<span class="tg a">受理(自動)</span>')):'<span class="tg" style="background:#fef3f0;color:#c4371c">未受理</span>')+'</label></td>'
+        +'<td class="c"><label style="cursor:pointer;white-space:nowrap"><input type="checkbox" '+(received?'checked':'')+' onchange="gsInv(\''+E(String(g.id))+'\',this.checked)"> '+(received?(linked?'<span class="tg a">受理(紐付)</span>':(gs.inv===true?'<span class="tg a">受理(手動)</span>':(hasDoc?'<span class="tg a">受理(添付)</span>':'<span class="tg a">受理(自動)</span>'))):'<span class="tg" style="background:#fef3f0;color:#c4371c">未受理</span>')+'</label></td>'
         +'<td class="c"><input type="checkbox" style="cursor:pointer" '+(gs.rcpt?'checked':'')+' onchange="gsRcpt(\''+E(String(g.id))+'\',this.checked)"></td>'
         +'<td class="c" style="white-space:nowrap">'+ops+'</td>'
         +'</tr>';
@@ -869,6 +871,20 @@ function renderLM(){
   }
   document.getElementById('LM_list').innerHTML=h||'<div class="empty">\u8a72\u5f53\u306a\u3057</div>';
 }
+var gdocs=function(gid){
+  fetch('/api/genka?docs='+encodeURIComponent(gid),{headers:{'x-admin-token':atok()}})
+  .then(function(r){if(!r.ok)throw new Error('取得失敗 '+r.status);return r.json()})
+  .then(function(res){
+    var fs=res.files||[];
+    if(!fs.length){alert('添付書類が見つかりませんでした');return}
+    if(fs.length===1){window.open(fs[0].url,'_blank');return}
+    var KIND={invoice:'請求書',receipt:'領収書',other:'その他'};
+    var pick=prompt('開く書類の番号を入力:\n'+fs.map(function(f,i){return (i+1)+'. ['+(KIND[f.kind]||f.kind)+'] '+f.name}).join('\n'),'1');
+    var n=parseInt(pick);
+    if(n>=1&&n<=fs.length)window.open(fs[n-1].url,'_blank');
+  })
+  .catch(function(e){alert('添付書類を開けませんでした: '+e.message)});
+};
 function lmPick(rowId){
   if(LMGID==null)return;
   gsOf(LMGID).link=rowId;
