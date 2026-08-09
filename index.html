@@ -112,6 +112,7 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
     <button class="btn" onclick="doReset()">🗑リセット</button>
   </div>
 </div>
+<div id="FYB" style="display:flex;gap:4px;padding:6px 20px 2px;background:#fff;overflow-x:auto;align-items:center"></div>
 <div class="tabs" id="T"></div>
 <div class="info">📋 支払期限の月 → 入金希望日の月 → どちらもなければ発行日の翌々月に振分。各行の「移動」列で手動変更可</div>
 <div class="cards" id="S"></div>
@@ -247,6 +248,7 @@ var F=function(n){return n==null||n===''||isNaN(n)?'':Number(n).toLocaleString('
 var E=function(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/'/g,'&#39;')};
 var SK='kol-invoice-v1';var D={m:{},o:[]};var AM='';var PD=[];var FI='all';var EC=null;
 var VMODE='pay';var AMI='';
+var LVIEW=false;var FYSEL='';var LQ='';// 一覧ビュー/決算期/検索
 
 var CL=[
   {k:'name',l:'取引先',w:120,t:'t'},{k:'date',l:'発行日',w:80,t:'t'},{k:'_invM',l:'請求月',w:64,t:'x'},{k:'recv',l:'受理',w:76,t:'t'},{k:'invNum',l:'請求書No',w:88,t:'t'},{k:'subject',l:'件名',w:140,t:'t'},
@@ -272,6 +274,17 @@ function todayStr(){var n=new Date();return n.getFullYear()+'/'+('0'+(n.getMonth
 function nearYear(m){var n=new Date();var ni=n.getFullYear()*12+n.getMonth()+1;var best=null,bd=1e9;[n.getFullYear()-1,n.getFullYear(),n.getFullYear()+1].forEach(function(y){var d=Math.abs(y*12+m-ni);if(d<bd||(d===bd&&y*12+m>=ni)){bd=d;best=y}});return best}
 function gT(ls){var g={};ls.forEach(function(v){var k=v.name+'|'+v.acNum;if(!g[k])g[k]=[];g[k].push(v)});var o={};Object.keys(g).forEach(function(k){var a=g[k];if(a.length>1){var t=a.reduce(function(s,i){return s+cc(i).tot},0);a.forEach(function(i){o[i.id]=t})}});return o}
 function invGroups(){var m={},o=[];var a=allInv();for(var i=0;i<a.length;i++){var v=a[i];var t=pYM(v.date);var k=t?yK(t):'\u65e5\u4ed8\u306a\u3057';if(!m[k]){m[k]=[];o.push(k)}m[k].push(v)}o.sort(function(x2,y2){var x=kY(x2),y=kY(y2);if(!x)return 1;if(!y)return -1;return(x.y*12+x.m)-(y.y*12+y.m)});return{m:m,o:o}}
+function fyOf(ym){if(!ym)return null;var s=(ym.m>=2)?ym.y:ym.y-1;return s}
+function fyKeyOf(ym){var s=fyOf(ym);return s==null?null:('FY'+s+'-'+String(s+1).slice(2))}
+function fyLabel(s){return 'FY'+s+'-'+String(s+1).slice(2)+'\uff08'+s+'/2\u301c'+(s+1)+'/1\uff09'}
+function inFY(k){if(FYSEL===''||FYSEL==='all')return true;var ym=kY(k);if(!ym)return true;return fyKeyOf(ym)===FYSEL}
+function setFY(f){FYSEL=f;
+  // 選択中のタブが期外なら、その期の最新月へ
+  if(!LVIEW){var g=VMODE==='pay'?{m:D.m,o:D.o}:invGroups();var vis=g.o.filter(inFY);
+    if(vis.length&&vis.indexOf(curTab())<0){if(VMODE==='pay')AM=vis[vis.length-1];else AMI=vis[vis.length-1]}}
+  rAll();
+}
+function goList(){LVIEW=true;EC=null;rAll()}
 function curTab(){return VMODE==='pay'?AM:AMI}
 function cL(){if(VMODE==='pay')return D.m[AM]||[];var g=invGroups();return g.m[AMI]||[]}
 
@@ -364,19 +377,112 @@ rAll();
 // Try loading from cloud (overwrites local if newer data exists)
 cloudLoad(function(ok){if(ok)rAll();autoRec()});
 
-function rAll(){try{rTabs();rSum();rT();rMC()}catch(e){console.error(e);document.getElementById('TB').innerHTML='<tr><td>Error: '+e.message+'</td></tr>'}}
+function rAll(){try{rFY();rTabs();if(LVIEW){rListSum();rList();rMCList()}else{rSum();rT();rMC()}}catch(e){console.error(e);document.getElementById('TB').innerHTML='<tr><td>Error: '+e.message+'</td></tr>'}}
+function listRows(){
+  var out=[];
+  for(var i=0;i<D.o.length;i++){var k=D.o[i];if(!inFY(k))continue;(D.m[k]||[]).forEach(function(v){out.push({t:k,v:v})})}
+  if(LQ){
+    var terms=LQ.toLowerCase().split(/[\s\u3000]+/).filter(function(x){return x});
+    out=out.filter(function(r){
+      var v=r.v;var im=pYM(v.date);
+      var hay=[r.t,v.name,v.date,im?yK(im):'',v.recv,v.invNum,v.subject,v.deadline,v.payBy,v.tNum,v.bank,v.branch,v.acType,v.acNum,v.acName,v.note,v.file].join(' ').toLowerCase();
+      for(var ti=0;ti<terms.length;ti++)if(hay.indexOf(terms[ti])<0)return false;
+      return true;
+    });
+  }
+  return out;
+}
+function lqSearch(val){LQ=val;rListSum();rList();rMCList();var el=document.getElementById('LQ_in');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n)}}
+function rListSum(){
+  var rows=listRows();var p=0,t=0,w=0;
+  rows.forEach(function(r){var c=cc(r.v);p+=c.tot;t+=c.tax;w+=Number(r.v.wh)||0});
+  var fyl=FYSEL==='all'?'\u5168\u671f\u9593':FYSEL;
+  document.getElementById('S').innerHTML=
+    '<div style="display:flex;gap:8px;align-items:center;width:100%;flex-wrap:wrap">'
+    +'<div class="sbox" style="max-width:340px;flex:2"><span style="color:#8a8279">\ud83d\udd0d</span><input id="LQ_in" value="'+E(LQ)+'" oninput="lqSearch(this.value)" placeholder="\u6708\u30fb\u5165\u91d1\u4e88\u5b9a\u65e5\u30fb\u4f1a\u793e\u540d\u30fb\u9280\u884c\u540d\u30fb\u4ef6\u540d\u306a\u3069\uff08\u30b9\u30da\u30fc\u30b9\u3067AND\u691c\u7d22\uff09"></div>'
+    +'<div class="card g" style="flex:1;min-width:150px"><div class="lb">'+E(fyl)+' \u5408\u8a08</div><div class="vl">\u00a5'+F(p)+'</div><div class="sub">'+rows.length+'\u4ef6</div></div>'
+    +'<div class="card b" style="flex:1;min-width:120px"><div class="lb">\u6d88\u8cbb\u7a0e</div><div class="vl">\u00a5'+F(t)+'</div></div>'
+    +'<div class="card" style="flex:1;min-width:120px"><div class="lb">\u6e90\u6cc9\u7a0e</div><div class="vl">\u00a5'+F(w)+'</div></div>'
+    +'</div>';
+}
+function rList(){
+  var rows=listRows();
+  var hh='<tr><th style="width:24px">No</th><th style="min-width:72px">\u6708</th><th style="min-width:110px">\u53d6\u5f15\u5148</th><th style="min-width:76px">\u767a\u884c\u65e5</th><th style="min-width:130px">\u4ef6\u540d</th><th class="r" style="min-width:60px">\u7a0e\u629c</th><th class="r" style="min-width:80px">\u7a0e\u8fbc\u652f\u6255\u984d</th><th style="min-width:76px">\u652f\u6255\u671f\u9650</th><th style="min-width:76px">\u5165\u91d1\u5e0c\u671b</th><th style="min-width:84px">\u9280\u884c</th><th style="min-width:70px">\u652f\u5e97</th><th style="min-width:66px">\u53e3\u5ea7\u756a\u53f7</th><th style="min-width:96px">\u53e3\u5ea7\u540d\u7fa9</th><th style="min-width:96px">\u5099\u8003</th><th style="min-width:60px">\u64cd\u4f5c</th></tr>';
+  document.getElementById('TH').innerHTML=hh;
+  if(!rows.length){document.getElementById('TB').innerHTML='<tr><td colspan="15" class="empty">\u8a72\u5f53\u306a\u3057</td></tr>';return}
+  var tP=0,tS=0,html='';
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i],v=r.v,c=cc(v);tP+=c.tot;tS+=Number(v.subtotal)||0;
+    var wr=v.note&&v.note.indexOf('\u26a0')>=0;
+    html+='<tr'+(wr?' class="w"':'')+'>'
+      +'<td class="c" style="color:#8a8279;font-size:9px">'+(i+1)+'</td>'
+      +'<td style="white-space:nowrap;font-weight:600">'+E(r.t)+'</td>'
+      +'<td>'+E(v.name||'')+'</td>'
+      +'<td style="white-space:nowrap">'+E(v.date||'')+'</td>'
+      +'<td class="nt" style="max-width:160px">'+E(v.subject||'')+'</td>'
+      +'<td class="r">'+F(v.subtotal||0)+'</td>'
+      +'<td class="r" style="font-weight:600">'+F(c.tot)+'</td>'
+      +'<td style="white-space:nowrap">'+E(v.deadline||'')+'</td>'
+      +'<td style="white-space:nowrap">'+E(v.payBy||'')+'</td>'
+      +'<td>'+E(v.bank||'')+'</td>'
+      +'<td>'+E(v.branch||'')+'</td>'
+      +'<td>'+E(v.acNum||'')+'</td>'
+      +'<td>'+E(v.acName||'')+'</td>'
+      +'<td class="nt" style="max-width:120px">'+E((v.note||'').replace(/\u26a0\s*/g,''))+'</td>'
+      +'<td class="c" style="white-space:nowrap">'
+      +'<span style="cursor:pointer" title="PDF" onclick="openPdfRow(rowById(\''+String(v.id)+'\'))">\ud83d\udcc4</span> '
+      +'<span style="cursor:pointer" title="\u7de8\u96c6" onclick="openMMRow(rowById(\''+String(v.id)+'\'))">\u270e</span> '
+      +'<span style="cursor:pointer;color:#c4371c" title="\u524a\u9664" onclick="dRid(\''+String(v.id)+'\')">\u2715</span>'
+      +'</td></tr>';
+  }
+  html+='<tr class="trow"><td></td><td colspan="4"><b>\u5408\u8a08 '+rows.length+'\u4ef6</b></td><td class="r">'+F(tS)+'</td><td class="r" style="font-size:12px">'+F(tP)+'</td><td colspan="8"></td></tr>';
+  document.getElementById('TB').innerHTML=html;
+}
+function rMCList(){
+  var mc=document.getElementById('MC');if(!mc)return;
+  var rows=listRows();
+  var h='<div style="padding:8px 0"><div class="sbox"><span style="color:#8a8279">\ud83d\udd0d</span><input value="'+E(LQ)+'" oninput="lqSearch(this.value)" placeholder="\u691c\u7d22\uff08\u6708\u30fb\u4f1a\u793e\u30fb\u9280\u884c\u306a\u3069\uff09"></div></div>';
+  if(!rows.length){mc.innerHTML=h+'<div class="empty">\u8a72\u5f53\u306a\u3057</div>';return}
+  var tP=0;
+  rows.forEach(function(r){var v=r.v,c=cc(v);tP+=c.tot;
+    h+='<div class="m-card"><div class="m-card-hd"><div class="m-card-name">'+E(v.name)+'</div><div class="m-card-total">\u00a5'+F(c.tot)+'</div></div>'
+      +'<div class="m-card-sub">'+E(r.t)+' \u30fb '+E(v.subject||'')+'</div>'
+      +(v.bank?'<div class="m-card-bank">'+E(v.bank)+' '+E(v.branch||'')+' '+E(v.acNum||'')+'</div>':'')
+      +'<div class="m-card-acts"><button class="m-edit-btn" onclick="openMMRow(rowById(\''+String(v.id)+'\'))">\u7de8\u96c6</button></div></div>'});
+  h+='<div class="m-card" style="background:#f7f5f1;text-align:center"><b>\u5408\u8a08 \u00a5'+F(tP)+'</b>\uff08'+rows.length+'\u4ef6\uff09</div>';
+  mc.innerHTML=h;
+}
+function dRid(id){var v=rowById(id);if(!v)return;if(!confirm((v.name||'\u3053\u306e\u884c')+'\u3092\u524a\u9664?'))return;rmById(v.id);sv();rAll()}
 
 // ===== TABS =====
+function rFY(){
+  var el=document.getElementById('FYB');if(!el)return;
+  // 存在する全月（両モード）からFY候補を抽出
+  var fys={};D.o.forEach(function(k){var ym=kY(k);var f=ym?fyOf(ym):null;if(f!=null)fys[f]=1});
+  var g2=invGroups();g2.o.forEach(function(k){var ym=kY(k);var f=ym?fyOf(ym):null;if(f!=null)fys[f]=1});
+  var list=Object.keys(fys).map(Number).sort(function(a,b){return a-b});
+  if(FYSEL===''){var n=new Date();var curF=fyOf({y:n.getFullYear(),m:n.getMonth()+1});FYSEL=(list.indexOf(curF)>=0)?('FY'+curF+'-'+String(curF+1).slice(2)):'all'}
+  var h='<span style="font-size:10px;color:#8a8279;padding-right:4px">\u6c7a\u7b97\u671f:</span>';
+  list.forEach(function(s){var key='FY'+s+'-'+String(s+1).slice(2);
+    h+='<button class="pill'+(FYSEL===key?' on':'')+'" title="'+fyLabel(s)+'" onclick="setFY(\''+key+'\')">'+key+'</button>'});
+  h+='<button class="pill'+(FYSEL==='all'?' on':'')+'" onclick="setFY(\'all\')">\u5168\u671f\u9593</button>';
+  el.innerHTML=h;
+}
 function rTabs(){
   var g=VMODE==='pay'?{m:D.m,o:D.o}:invGroups();
-  if(VMODE!=='pay'&&(!AMI||!g.m[AMI]))AMI=g.o[g.o.length-1]||'';
-  var cur=curTab();var h='';
-  for(var i=0;i<g.o.length;i++){var mm=g.o[i];var arr=g.m[mm]||[];var tot=0;for(var j=0;j<arr.length;j++)tot+=cc(arr[j]).tot;
+  var vis=g.o.filter(inFY);
+  if(!LVIEW){
+    if(VMODE!=='pay'&&(!AMI||!g.m[AMI]))AMI=vis[vis.length-1]||g.o[g.o.length-1]||'';
+    if(vis.length&&vis.indexOf(curTab())<0){if(VMODE==='pay')AM=vis[vis.length-1];else AMI=vis[vis.length-1]}
+  }
+  var cur=LVIEW?null:curTab();var h='';
+  for(var i=0;i<vis.length;i++){var mm=vis[i];var arr=g.m[mm]||[];var tot=0;for(var j=0;j<arr.length;j++)tot+=cc(arr[j]).tot;
     h+='<div class="tab'+(mm===cur?' on':'')+'" onclick="go(\''+E(mm)+'\')">'+E(mm)+'<span class="cnt">'+arr.length+'\u4ef6 \u00a5'+F(tot)+'</span></div>'}
-  if(VMODE==='pay')h+='<div class="tab" onclick="addTab()" style="font-size:16px;font-weight:700;color:#8a8279" title="\u6708\u30bf\u30d6\u3092\u8ffd\u52a0">\uff0b</div>';
+  if(VMODE==='pay'&&!LVIEW)h+='<div class="tab" onclick="addTab()" style="font-size:16px;font-weight:700;color:#8a8279" title="\u6708\u30bf\u30d6\u3092\u8ffd\u52a0">\uff0b</div>';
+  h+='<div class="tab'+(LVIEW?' on':'')+'" onclick="goList()" style="margin-left:auto" title="\u5168\u671f\u9593\u306e\u652f\u6255\u3044\u3092\u691c\u7d22\u30fb\u4e00\u89a7">\ud83d\udcca \u4e00\u89a7</div>';
   document.getElementById('T').innerHTML=h;
 }
-function go(m){if(VMODE==='pay')AM=m;else AMI=m;EC=null;rAll()}
+function go(m){LVIEW=false;if(VMODE==='pay')AM=m;else AMI=m;EC=null;rAll()}
 function setVM(m){
   VMODE=m;
   var p=document.getElementById('vmPay'),q=document.getElementById('vmInv');
@@ -558,6 +664,7 @@ function rmById(id){
   return false}
 function mvI(idx,tab){var v=cL()[idx];if(!v)return;rmById(v.id);eT(tab);D.m[tab].push(v);if(VMODE==='pay')AM=tab;sv();rAll()}
 function addRow(){
+  if(LVIEW){LVIEW=false}
   if(VMODE!=='pay')setVM('pay');
   if(!AM&&D.o.length)AM=D.o[D.o.length-1];if(!AM){addTab();return}
   cL().push({id:Date.now(),name:'',date:'',invNum:'',subject:'',rate:.08,subtotal:0,wh:null,exp:null,deadline:'',payBy:'',tNum:'',bank:'',branch:'',acType:'\u666e\u901a',acNum:'',acName:'',note:'',file:''});
