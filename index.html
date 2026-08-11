@@ -99,6 +99,19 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
   .drop{margin:0 12px;padding:14px}.procs{margin:4px 12px}.bar{padding:6px 12px}.sbox{max-width:100%}
   .tw{display:none}.mobile-cards{display:block}
 }
+
+/* ===== 全項目フィット表示: ウインドウ幅に合わせて文字サイズが縮み、全列が常に見える ===== */
+@media(min-width:769px){
+  .tw{overflow-x:visible}
+  .tw table{width:100%;table-layout:auto}
+  .tw th,.tw td{min-width:0 !important;width:auto !important;white-space:normal !important;word-break:break-word;padding:5px 3px;font-size:clamp(6.5px,0.72vw,11px)}
+  .tw th{font-size:clamp(6px,0.66vw,10px);white-space:nowrap !important}
+  .tw td input,.tw td select{font-size:inherit;min-width:0;max-width:100%}
+  .tw .tn{font-size:.9em}
+  .tw .tg{padding:1px 4px;font-size:.85em}
+  .tw td.r,.tw th.r{white-space:nowrap !important}
+  .tw select.mv{max-width:100%;font-size:inherit}
+}
 </style>
 </head>
 <body>
