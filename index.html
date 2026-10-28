@@ -240,7 +240,8 @@ td.ig input[type=number]{font-family:'JetBrains Mono',monospace;text-align:right
       <div class="m-fi-row"><div class="m-fi"><label>発行日</label><input id="mm_date" placeholder="2026/03/01"></div><div class="m-fi"><label>請求書番号</label><input id="mm_invNum"></div></div>
       <div class="m-fi"><label>受理（月 or 日付）</label><input id="mm_recv" placeholder="2026年7月 / 2026/07/15"></div>
       <div class="m-fi"><label>件名/内容</label><input id="mm_subject"></div>
-      <div class="m-fi-row"><div class="m-fi"><label>税率</label><select id="mm_rate" onchange="mCalc()"><option value="0.10">10%</option><option value="0.08">8%</option><option value="0">0%</option></select></div><div class="m-fi"><label>税抜金額</label><input type="number" id="mm_subtotal" oninput="mCalc()"></div></div>
+      <div class="m-fi-row"><div class="m-fi"><label>税率</label><select id="mm_rate" onchange="mCalc()"><option value="0.10">10%</option><option value="0.08">8%</option><option value="0">0%</option><option value="mixed">混在（原本税額指定）</option></select></div><div class="m-fi"><label>税抜金額</label><input type="number" id="mm_subtotal" oninput="mCalc()"></div></div>
+      <div class="m-fi"><label for="mm_taxOverride">原本の消費税額（円・空欄は自動計算）</label><input type="number" step="1" id="mm_taxOverride" oninput="mCalc()"><small>8%・10%混在や端数差がある請求書は、原本の税額合計を入力。指定額は再編集後も保持されます。</small></div>
       <div class="m-fi-row"><div class="m-fi"><label>源泉税</label><input type="number" id="mm_wh" oninput="mCalc()"></div><div class="m-fi"><label>実費/経費</label><input type="number" id="mm_exp" oninput="mCalc()"></div></div>
       <div class="m-calc"><div class="m-calc-item"><div class="lb">消費税</div><div class="vl" id="mm_ptax">-</div></div><div class="m-calc-item"><div class="lb">税込支払額</div><div class="vl" id="mm_ptot" style="color:#2d5a27">-</div></div></div>
       <div class="m-fi-row"><div class="m-fi"><label>支払期限</label><input id="mm_deadline" placeholder="2026/03/31"></div><div class="m-fi"><label>入金希望日</label><input id="mm_payBy"></div></div>
@@ -279,7 +280,9 @@ function kY(k){var x=k.match(/(\d{4})\u5e74(\d{1,2})\u6708/);return x?{y:+x[1],m
 function gPM(v){var d=pYM(v.deadline);if(d)return d;var p=pYM(v.payBy);if(p)return p;var t=pYM(v.date);if(t)return aM(t,2);var n=new Date();return{y:n.getFullYear(),m:n.getMonth()+1}}
 function srt(){D.o.sort(function(a,b){var x=kY(a),y=kY(b);return(x.y*12+x.m)-(y.y*12+y.m)})}
 function eT(k){if(!D.m[k]){D.m[k]=[];D.o.push(k);srt()}}
-function cc(v){var s=Number(v.subtotal)||0,r=Number(v.rate)||0,w=Number(v.wh)||0,x=Number(v.exp)||0;var t=Math.round(s*r);return{tax:t,tot:s+t-w+x}}
+function originalTax(v){var x=v.taxOverride;if(x===null||x===undefined||String(x).trim()==='')return null;var n=Number(x);return Number.isSafeInteger(n)?n:null}
+function rateLabel(v){return v.rate==='mixed'?'混在':Math.round((Number(v.rate)||0)*100)+'%'}
+function cc(v){var s=Number(v.subtotal)||0,r=Number(v.rate)||0,w=Number(v.wh)||0,x=Number(v.exp)||0;var o=originalTax(v),t=o===null?Math.round(s*r):o;return{tax:t,tot:s+t-w+x}}
 function eom(ym){var d=new Date(ym.y,ym.m,0);return ym.y+'/'+('0'+ym.m).slice(-2)+'/'+('0'+d.getDate()).slice(-2)}
 function autoDL(v){if(!v.deadline&&!v.payBy){var t=pYM(v.date);if(t)v.deadline=eom(aM(t,2))}}
 function invMonthsAgo(v){var t=pYM(v.date);if(!t)return 0;var n=new Date();return(n.getFullYear()*12+n.getMonth()+1)-(t.y*12+t.m)}
@@ -550,7 +553,7 @@ function rT(){
       else if(col.k==='_tax')html+='<td class="r ctax" data-ci="'+idx+'" style="color:#8a8279">'+F(c.tax)+'</td>';
       else if(col.k==='_tot')html+='<td class="r ctot" data-ci="'+idx+'" style="font-weight:600">'+F(c.tot)+'</td>';
       else if(col.k==='_grp')html+='<td class="r">'+(gv?'<span class="grp">'+F(gv)+'</span>':'')+'</td>';
-      else if(col.k==='rate'){var rv=Number(v.rate)||0;var tg=rv===.10?'<span class="tg a">10%</span>':(rv===.08?'<span class="tg b">8%</span>':'<span class="tg" style="background:#ece8e1;color:#5c554a">0%</span>');html+='<td class="c ed" data-i="'+idx+'" data-k="rate" onclick="sE(this)">'+tg+'</td>'}
+      else if(col.k==='rate'){var tg='<span class="tg">'+rateLabel(v)+(originalTax(v)!==null?' 原本':'')+'</span>';html+='<td class="c" style="cursor:pointer" title="税率・原本税額を編集" onclick="openMM('+idx+')">'+tg+'</td>'}
       else if(col.k==='note'){var tx=(v.note||'').replace(/\u26a0\s*/g,'');html+='<td class="ed" data-i="'+idx+'" data-k="note" onclick="sE(this)">'+(wr?'<span class="wi">\u26a0</span> ':'')+'<span class="nt">'+E(tx)+'</span></td>'}
       else if(col.t==='n'){html+='<td class="r ed" data-i="'+idx+'" data-k="'+col.k+'" onclick="sE(this)">'+(v[col.k]?F(v[col.k]):'')+'</td>'}
       else if(col.t==='s'){html+='<td class="c ed" data-i="'+idx+'" data-k="'+col.k+'" onclick="sE(this)">'+(v[col.k]||'')+'</td>'}
@@ -581,7 +584,7 @@ function rMC(){
     h+='<div class="m-card-hd"><div class="m-card-name">'+E(v.name)+'</div><div class="m-card-total">\u00a5'+F(c.tot)+'</div></div>';
     h+='<div class="m-card-sub">'+E(v.subject||'')+(v.date?' \u30fb '+v.date:'')+'</div>';
     h+='<dl class="m-card-grid">';
-    h+='<dt>\u7a0e\u7387</dt><dd>'+(Number(v.rate)===.10?'<span class="tg a">10%</span>':(Number(v.rate)===.08?'<span class="tg b">8%</span>':'<span class="tg">0%</span>'))+'</dd>';
+    h+='<dt>\u7a0e\u7387</dt><dd>'+rateLabel(v)+(originalTax(v)!==null?'（原本税額）':'')+'</dd>';
     var imm=pYM(v.date);if(imm)h+='<dt>\u8acb\u6c42\u6708</dt><dd>'+yK(imm)+'</dd>';
     if(v.recv)h+='<dt>\u53d7\u7406</dt><dd>'+E(v.recv)+'</dd>';
     h+='<dt>\u7a0e\u629c</dt><dd>'+F(v.subtotal)+'</dd>';
@@ -609,7 +612,8 @@ function openMMRow(v){
   document.getElementById('MM_title').textContent=v.name||'\u65b0\u898f';
   var fields=['name','date','recv','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
   fields.forEach(function(f){document.getElementById('mm_'+f).value=v[f]||''});
-  document.getElementById('mm_rate').value=String(v.rate||0.08);
+  document.getElementById('mm_rate').value=v.rate==='mixed'?'mixed':String(Number(v.rate)===0?0:Number(v.rate)===.10?'0.10':'0.08');
+  document.getElementById('mm_taxOverride').value=originalTax(v)===null?'':originalTax(v);
   document.getElementById('mm_subtotal').value=v.subtotal||'';
   document.getElementById('mm_wh').value=v.wh||'';
   document.getElementById('mm_exp').value=v.exp||'';
@@ -621,15 +625,20 @@ function closeMM(){document.getElementById('MM').classList.remove('open');mmIdx=
 function mCalc(){
   var s=parseInt(document.getElementById('mm_subtotal').value)||0,r=parseFloat(document.getElementById('mm_rate').value)||0;
   var w=parseInt(document.getElementById('mm_wh').value)||0,e=parseInt(document.getElementById('mm_exp').value)||0;
-  var tax=Math.round(s*r);
+  var tax=cc({subtotal:s,rate:r,taxOverride:document.getElementById('mm_taxOverride').value}).tax;
   document.getElementById('mm_ptax').textContent='\u00a5'+F(tax);
   document.getElementById('mm_ptot').textContent='\u00a5'+F(s+tax-w+e);
 }
 function saveMM(){
   if(!MMR)return;var v=MMR;
+  var rawTax=document.getElementById('mm_taxOverride').value.trim();
+  var selectedRate=document.getElementById('mm_rate').value;
+  if(rawTax!==''&&!Number.isSafeInteger(Number(rawTax))){alert('原本の消費税額は整数の円額で入力してください');return}
+  if(selectedRate==='mixed'&&rawTax===''){alert('混在税率では原本の消費税額を入力してください');return}
   var fields=['name','date','recv','invNum','subject','deadline','payBy','tNum','bank','branch','acNum','acName','note','file'];
   fields.forEach(function(f){v[f]=document.getElementById('mm_'+f).value});
-  v.rate=parseFloat(document.getElementById('mm_rate').value);
+  v.rate=selectedRate==='mixed'?'mixed':parseFloat(selectedRate);
+  v.taxOverride=rawTax===''?null:Number(rawTax);
   v.subtotal=parseInt(document.getElementById('mm_subtotal').value)||0;
   v.wh=parseInt(document.getElementById('mm_wh').value)||null;
   v.exp=parseInt(document.getElementById('mm_exp').value)||null;
@@ -726,7 +735,9 @@ function importArr(arr){
   for(var i=0;i<arr.length;i++){
     var v=arr[i];v.id=Date.now()+Math.random()+i;
     if(typeof v.rate==='undefined')v.rate=v.tNum?0.10:0.08;
-    if(typeof v.rate==='string')v.rate=v.rate.indexOf('10')>=0?0.10:0.08;
+    if(typeof v.rate==='string'&&v.rate!=='mixed')v.rate=v.rate.indexOf('10')>=0?0.10:v.rate.indexOf('8')>=0?0.08:0;
+    if(v.taxOverride!==undefined&&v.taxOverride!==null&&String(v.taxOverride).trim()!==''){v.taxOverride=Number(String(v.taxOverride).replace(/,/g,''));if(!Number.isSafeInteger(v.taxOverride))throw new Error('原本税額は整数で指定してください')}
+    if(v.rate==='mixed'&&originalTax(v)===null)throw new Error('混在税率には原本税額が必要です');
     if(typeof v.subtotal==='string')v.subtotal=parseInt(v.subtotal.replace(/[,\s]/g,''))||0;
     if(typeof v.wh==='string')v.wh=parseInt(v.wh.replace(/[,\s]/g,''))||null;
     if(typeof v.exp==='string')v.exp=parseInt(v.exp.replace(/[,\s]/g,''))||null;
@@ -740,6 +751,7 @@ function parseCsv(txt){
   if(lines.length<2)return[];
   var hdr=csvSplit(lines[0]);
   var MAP={'\u53d6\u5f15\u5148\u540d':'name','\u53d6\u5f15\u5148':'name','\u53d6\u5f15\u5148\u540d\uff08\u652f\u6255\u5148\uff09':'name','\u767a\u884c\u65e5':'date','\u8acb\u6c42\u66f8\u756a\u53f7':'invNum','\u8acb\u6c42\u66f8No':'invNum','\u4ef6\u540d':'subject','\u4ef6\u540d/\u5185\u5bb9':'subject','\u7a0e\u7387':'rate','\u7a0e\u629c\u91d1\u984d':'subtotal','\u6e90\u6cc9\u7a0e':'wh','\u6e90\u6cc9':'wh','\u5b9f\u8cbb':'exp','\u5b9f\u8cbb/\u7d4c\u8cbb\uff08\u7a0e\u306a\u3057\uff09':'exp','\u652f\u6255\u671f\u9650':'deadline','\u5165\u91d1\u5e0c\u671b\u65e5':'payBy','\u5165\u91d1\u5e0c\u671b':'payBy','\u5165\u91d1\u5e0c\u671b\u65e5/\u632f\u8fbc\u671f\u9650\uff08\u8acb\u6c42\u66f8\u8a18\u8f09\uff09':'payBy','\u9069\u683c\u756a\u53f7':'tNum','\u9069\u683c\u756a\u53f7\uff08\u767b\u9332\u756a\u53f7\uff09':'tNum','\u9280\u884c':'bank','\u632f\u8fbc\u5148\u9280\u884c':'bank','\u652f\u5e97':'branch','\u53e3\u5ea7\u7a2e\u5225':'acType','\u7a2e\u5225':'acType','\u53e3\u5ea7\u756a\u53f7':'acNum','\u53e3\u5ea7\u540d\u7fa9':'acName','\u53d7\u7406':'recv','\u5099\u8003':'note','\u5099\u8003/\u30e1\u30e2':'note','\u5143\u30d5\u30a1\u30a4\u30eb':'file'};
+  MAP['原本消費税額']='taxOverride';
   var keys=[];for(var i=0;i<hdr.length;i++){var h=hdr[i].trim();keys.push(MAP[h]||null)}
   var results=[];
   for(var r=1;r<lines.length;r++){
@@ -748,7 +760,7 @@ function parseCsv(txt){
     var obj={};
     for(var c=0;c<keys.length;c++){
       if(!keys[c])continue;var v=(vals[c]||'').trim();
-      if(keys[c]==='rate')obj.rate=v.indexOf('10')>=0?0.10:0.08;
+      if(keys[c]==='rate')obj.rate=v.indexOf('混在')>=0?'mixed':v.indexOf('10')>=0?0.10:v.indexOf('8')>=0?0.08:0;
       else if(keys[c]==='subtotal'||keys[c]==='wh'||keys[c]==='exp'){var n=parseInt(v.replace(/[,\s\u00a5\\]/g,''));obj[keys[c]]=isNaN(n)||n===0?null:n}
       else obj[keys[c]]=v;
     }
@@ -832,7 +844,7 @@ function renderRV(){
       +'<td style="font-weight:600">'+E(v.name||'')+(wr?' <span class="wi" title="'+E(v.note||'')+'">\u26a0</span>':'')+'</td>'
       +'<td style="white-space:nowrap">'+E(v.date||'')+'</td>'
       +'<td class="nt" style="max-width:150px;overflow:hidden;text-overflow:ellipsis">'+E(v.subject||'')+'</td>'
-      +'<td class="c">'+Math.round((Number(v.rate)||0)*100)+'%</td>'
+      +'<td class="c">'+rateLabel(v)+(originalTax(v)!==null?' 原本':'')+'</td>'
       +'<td class="r">'+F(v.subtotal||0)+'</td>'
       +'<td class="r">'+(v.wh?F(v.wh):'')+'</td>'
       +'<td class="r">'+(v.exp?F(v.exp):'')+'</td>'
@@ -907,10 +919,11 @@ function doCSV(){
   var gtAll={};
   if(all){var pool=rows.map(function(r){return r.v});gtAll=gT(pool)}else{gtAll=gT(cL())}
   var h=['No','月','取引先名','発行日','請求月','受理','請求書番号','件名','税率','税抜金額','消費税','源泉税','実費','税込支払額','支払期限','入金希望日','適格番号','銀行','支店','口座種別','口座番号','口座名義','同一先合計','備考','元ファイル'];
+  h.push('原本消費税額');
   var csv='\uFEFF'+h.join(',')+'\n';
   for(var i=0;i<rows.length;i++){
     var v=rows[i].v,c=cc(v);var im=pYM(v.date);
-    csv+=[i+1,'"'+rows[i].t+'"','"'+(v.name||'')+'"',v.date||'','"'+(im?yK(im):'')+'"','"'+(v.recv||'')+'"','"'+(v.invNum||'')+'"','"'+(v.subject||'')+'"',Math.round((v.rate||0)*100)+'%','"'+F(v.subtotal||0)+'"','"'+F(c.tax)+'"',v.wh?'"'+F(v.wh)+'"':'',v.exp?'"'+F(v.exp)+'"':'','"'+F(c.tot)+'"',v.deadline||'',v.payBy||'',v.tNum||'',v.bank||'',v.branch||'',v.acType||'',v.acNum||'','"'+(v.acName||'')+'"',gtAll[v.id]?'"'+F(gtAll[v.id])+'"':'','"'+((v.note||'').replace(/"/g,'""'))+'"','"'+((v.file||'').replace(/"/g,'""'))+'"'].join(',')+'\n';
+    csv+=[i+1,'"'+rows[i].t+'"','"'+(v.name||'')+'"',v.date||'','"'+(im?yK(im):'')+'"','"'+(v.recv||'')+'"','"'+(v.invNum||'')+'"','"'+(v.subject||'')+'"',rateLabel(v),'"'+F(v.subtotal||0)+'"','"'+F(c.tax)+'"',v.wh?'"'+F(v.wh)+'"':'',v.exp?'"'+F(v.exp)+'"':'','"'+F(c.tot)+'"',v.deadline||'',v.payBy||'',v.tNum||'',v.bank||'',v.branch||'',v.acType||'',v.acNum||'','"'+(v.acName||'')+'"',gtAll[v.id]?'"'+F(gtAll[v.id])+'"':'','"'+((v.note||'').replace(/"/g,'""'))+'"','"'+((v.file||'').replace(/"/g,'""'))+'"',originalTax(v)===null?'':originalTax(v)].join(',')+'\n';
   }
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
   a.download='inv_'+(all?'all':curTab())+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
